@@ -115,7 +115,7 @@ class BigEarthNetDataset(Dataset):
 
 
 class MetaBigEarthNetTaskDataset(IterableDataset):
-    def __init__(self, split='train', support_size=4, label_subset_size=5, data_dir="../BigEarthNet-v1.0/", filter_files=["../patches_with_cloud_and_shadow.csv", "../patches_with_seasonal_snow.csv"], filter_data=True, mode='rgb', label_count_cache='./label_counts.pkl', val_prop=0.25, test_prop=0.2, split_file=None, split_save_path='splits.pkl', seed=42):
+    def __init__(self, split='train', support_size=8, label_subset_size=3, data_dir="../BigEarthNet-v1.0/", filter_files=["../patches_with_cloud_and_shadow.csv", "../patches_with_seasonal_snow.csv"], filter_data=True, mode='rgb', label_count_cache='./label_counts.pkl', val_prop=0.25, test_prop=0.2, split_file=None, split_save_path='splits.pkl', seed=42):
         super(MetaBigEarthNetTaskDataset, self).__init__()
         random.seed(seed)
         self.support_size = support_size
@@ -149,27 +149,33 @@ class MetaBigEarthNetTaskDataset(IterableDataset):
 
     def __iter__(self):
         n_classes = len(self.key_indices)
+        #key_mask = np.array([1 if i in self.key_indices else 0 for i in range(len(self.counts))])
         while True:
             seen = np.zeros((n_classes,), dtype=int)
             support = [] # target shape: (support, w, h) -> then we can collate
             labels = [] # target shape: (support, label_subset_size)
+            raw_labels = [] # target shape: (support,) [list of objects]
             while len(support) < self.support_size:
                 idx = random.choice(self.indices)
                 img, label = self.dataset[idx] # shape: (w, h), (n_classes)
-                label = label[self.key_indices]
+                raw_indices = np.intersect1d(np.where(label)[0], self.key_indices) 
+                label = label[self.key_indices] 
                 if np.count_nonzero(label | seen) > self.label_subset_size:
                     continue
                 seen = label | seen
                 support.append(img)
                 labels.append(torch.LongTensor(label))
+                curr_label_indices = torch.LongTensor(np.pad(raw_indices, (0, self.label_subset_size - len(raw_indices)), 'constant', constant_values=-1))
+                raw_labels.append(curr_label_indices)
             support = torch.stack(support, dim=0)
             labels = torch.stack(labels, dim=0) # shape is temporariliy (support, n_classes)
+            raw_labels = torch.stack(raw_labels, dim=0)
             selected_class_mask = torch.abs(labels).sum(dim=0) > 0
             cardinality = np.count_nonzero(seen)
             artificial_classes = np.random.choice(np.where(~selected_class_mask)[0], size=self.label_subset_size - cardinality, replace=False)
             selected_class_mask[artificial_classes] = True
             labels = labels[:, selected_class_mask]
-            yield support, labels
+            yield support, labels, raw_labels
 
 
     def get_train_val_test_indices(self, premade_split_file=None, split_save_path=None, rebuild=False):
@@ -218,7 +224,7 @@ class MetaBigEarthNetTaskDataset(IterableDataset):
                 pickle.dump(index_dict, f)
         return train_indices, val_indices, test_indices
 
-def get_dataloaders(train_batch_size=8, val_batch_size=8, test_batch_size=8, support_size=4, label_subset_size=5, data_dir="../BigEarthNet-v1.0/", filter_files=["../patches_with_cloud_and_shadow.csv", "../patches_with_seasonal_snow.csv"], filter_data=True, mode='rgb', label_count_cache='./label_counts.pkl', val_prop=0.25, test_prop=0.2, split_file=None, split_save_path='splits.pkl', seed=42):
+def get_dataloaders(train_batch_size=8, val_batch_size=8, test_batch_size=8, support_size=8, label_subset_size=3, data_dir="../BigEarthNet-v1.0/", filter_files=["../patches_with_cloud_and_shadow.csv", "../patches_with_seasonal_snow.csv"], filter_data=True, mode='rgb', label_count_cache='./label_counts.pkl', val_prop=0.25, test_prop=0.2, split_file=None, split_save_path='splits.pkl', seed=42):
     train = MetaBigEarthNetTaskDataset(split='train', support_size=support_size, label_subset_size=label_subset_size, data_dir=data_dir, filter_files=filter_files, filter_data=filter_data, mode=mode, label_count_cache=label_count_cache, val_prop=val_prop, test_prop=test_prop, split_file=split_file, split_save_path=split_save_path, seed=seed)
     val = MetaBigEarthNetTaskDataset(split='val', support_size=support_size, label_subset_size=label_subset_size, data_dir=data_dir, filter_files=filter_files, filter_data=filter_data, mode=mode, label_count_cache=label_count_cache, val_prop=val_prop, test_prop=test_prop, split_file=split_file, split_save_path=split_save_path, seed=seed)
     test = MetaBigEarthNetTaskDataset(split='test', support_size=support_size, label_subset_size=label_subset_size, data_dir=data_dir, filter_files=filter_files, filter_data=filter_data, mode=mode, label_count_cache=label_count_cache, val_prop=val_prop, test_prop=test_prop, split_file=split_file, split_save_path=split_save_path, seed=seed)
