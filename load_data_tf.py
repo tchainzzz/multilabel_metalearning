@@ -131,7 +131,7 @@ class MetaBigEarthNetTaskDataset():
         if label_subset_size < 1:
             raise Exception("Subset size must be strictly positive.")
 
-        self.counts = self.dataset.counts 
+        self.counts = self.dataset.counts
         self.test_keys = set(sorted(random.choices(list(self.counts.keys()), k=int(test_prop * len(self.counts)))))
         remaining_keys = [k for k in self.counts.keys() if k not in self.test_keys]
         self.val_keys = set(sorted(random.choices(remaining_keys, k=int(val_prop * len(remaining_keys)))))
