@@ -60,7 +60,7 @@ class BigEarthNetDataset():
         else:
             with open(label_count_cache, 'rb') as cache_file:
                 self.counts = pickle.load(cache_file)
-        self.idx_to_label = dict(enumerate(sorted(self.counts.keys())))
+        self.idx_to_label = defaultdict(enumerate(sorted(self.counts.keys())))
         #self.label_to_idx = {v: k for k, v in self.idx_to_label.items()}
         self.meta = meta # are we using this as a part of meta-training/val/test?
 
@@ -151,7 +151,6 @@ class MetaBigEarthNetTaskDataset():
 
         key_indices = [i for i, k in enumerate(self.counts.keys()) if k in keys]
         n_classes = len(key_indices)
-        print(key_indices, len(indices))
         #key_mask = np.array([1 if i in self.key_indices else 0 for i in range(len(self.counts))])
         support = np.zeros((batch_size, self.support_size, *self.dataset.get_shape())) # target shape: (batch_size, support, w, h) -> then we can collate
         labels = np.zeros((batch_size, self.support_size, self.label_subset_size)) # target shape: (batch_size, support, label_subset_size)
