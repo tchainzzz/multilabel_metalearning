@@ -60,7 +60,7 @@ class BigEarthNetDataset():
         else:
             with open(label_count_cache, 'rb') as cache_file:
                 self.counts = pickle.load(cache_file)
-        self.idx_to_label = defaultdict(enumerate(sorted(self.counts.keys())))
+        self.idx_to_label = dict(enumerate(sorted(self.counts.keys())))
         #self.label_to_idx = {v: k for k, v in self.idx_to_label.items()}
         self.meta = meta # are we using this as a part of meta-training/val/test?
 
