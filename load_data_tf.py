@@ -96,7 +96,7 @@ class BigEarthNetDataset():
         labels = np.array([1 if cover_type in raw_labels else 0 for cover_type in self.counts.keys()])
         #if not self.meta:
         #    labels = torch.LongTensor(labels)
-        return img, labels
+        return img.astype(np.float32), labels
 
 
     def __len__(self):
