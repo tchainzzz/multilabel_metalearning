@@ -67,8 +67,7 @@ class MAML(tf.keras.Model):
             self.inner_update_lr_dict = {}
             for key in self.conv_layers.conv_weights.keys():
                 self.inner_update_lr_dict[key] = [
-                    tf.Variable(
-                        self.inner_update_lr, name='inner_update_lr_%s_%d' %
+                    tf.Variable(self.inner_update_lr, name='inner_update_lr_%s_%d' %
                         (key, j)) for j in range(num_inner_updates)]
 
     @tf.function
@@ -89,28 +88,23 @@ class MAML(tf.keras.Model):
             # where task_outputs_ts[i], task_losses_ts[i], task_accuracies_ts[i] are the output, loss, and accuracy after i+1 inner gradient updates
             task_outputs_ts, task_losses_ts, task_accuracies_ts = [], [], []
 
-            new_weights = {}
-            with tf.GradientTape(persistent=True) as g1:
-                g1.watch(weights)
-                task_output_tr_pre = self.conv_layers(input_tr, weights)
-                task_loss_tr_pre = self.loss_func(task_output_tr_pre, label_tr)
+            task_output_tr_pre = self.conv_layers(input_tr, weights)
+            task_loss_tr_pre = self.loss_func(task_output_tr_pre, label_tr)
+            for i in range(num_inner_updates):
+                with tf.GradientTape(persistent=False) as tape: # keep track of high-order derivs on train data only, and use those to update
+                    for key in weights: tape.watch(weights[key])
+                    output_tr = self.conv_layers(input_tr, weights)
+                    loss_tr = self.loss_func(output_tr, label_tr)
+                grads = dict(zip(weights.keys(), tape.gradient(loss_tr, list(weights.values())))) # might need to make a TF op 
+                if self.learn_inner_update_lr:
+                    weights = dict(zip(weights.keys(), [weights[key] - self.inner_update_lr_dict[key] * grads[key] for key in weights])) # might need to make a TF op? probably OK
+                else:
+                    weights = dict(zip(weights.keys(), [weights[key] - self.inner_update_lr * grads[key] for key in weights])) # might need to make a TF op? probably OK
 
-            grads1 = g1.gradient(task_loss_tr_pre, weights)
-            for key in weights.keys():
-                new_weights[key] = weights[key] - self.inner_update_lr * grads1[key]
-
-            for iter in range(num_inner_updates - 1):
-                with tf.GradientTape(persistent=True) as g2:
-                    g2.watch(new_weights)
-                    task_outputs_ts.append(self.conv_layers(input_tr, new_weights))
-                    task_losses_ts.append(self.loss_func(task_outputs_ts[iter], label_tr))
-
-                grads2 = g2.gradient(task_losses_ts[iter], new_weights[key])
-                for key in weights.keys():
-                    new_weights[key] = new_weights[key] - self.inner_update_lr * grads2[key]
-
-            task_outputs_ts.append(self.conv_layers(input_ts, new_weights))
-            task_losses_ts.append(self.loss_func(task_outputs_ts[-1], label_ts))
+                # post-update metrics on test
+                output_ts = self.conv_layers(input_ts, weights)
+                task_outputs_ts.append(output_ts) # TODO: Make TF op
+                task_losses_ts.append(self.loss_func(output_ts, label_ts)) # TODO: Make TF op
 
             #############################
 
@@ -189,8 +183,6 @@ def outer_eval_step(inp, model, meta_batch_size=25, num_inner_updates=1):
 
 def meta_train_fn(model, exp_string, meta_dataset, support_size=8, num_classes=7, meta_train_iterations=15000, meta_batch_size=16, log=True, logdir='/tmp/data', num_inner_updates=1, meta_lr=0.001, log_frequency=5, test_log_frequency=25):
 
-    PRINT_INTERVAL = 1
-    TEST_PRINT_INTERVAL = PRINT_INTERVAL * 5
 
     pre_accuracies, post_accuracies = [], []
     pre_loss, post_loss = [], []

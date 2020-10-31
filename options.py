@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 
 def get_args():
     psr = ArgumentParser()
-    psr.add_argument("--support-size", type=int, default=4, help="# of examples to load for each support set. For meta-validation, query set size is equal to support size.")
+    psr.add_argument("--support-size", type=int, default=8, help="# of examples to load for each support set. For meta-validation, query set size is equal to support size.")
     psr.add_argument("--inner-update-lr", type=float, default=0.4, help="Inner optimization learning rate initialization. Constant if --learn-inner-lr not specified.")
     psr.add_argument("--num_inner_updates", type=int, default=1, help="Number of inner optimization steps (MAML).")
     psr.add_argument("--iterations", type=int, default=4000, help="Number of outer optimization iterations (MAML).")
