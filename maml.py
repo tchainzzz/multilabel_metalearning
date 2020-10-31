@@ -82,11 +82,13 @@ class MAML(tf.keras.Model):
             weights = self.conv_layers.conv_weights
 
             # the predicted outputs, loss values, and accuracy for the pre-update model (with the initial weights), evaluated on the inner loop training data
-            task_output_tr_pre, task_loss_tr_pre, task_accuracy_tr_pre = None, None, None
+            task_output_tr_pre, task_loss_tr_pre = None, None
+            task_precision_tr_pre, task_recall_tr_pre, task_f1_tr_pre = None, None, None
 
             # lists to keep track of outputs, losses, and accuracies of test data for each inner_update
             # where task_outputs_ts[i], task_losses_ts[i], task_accuracies_ts[i] are the output, loss, and accuracy after i+1 inner gradient updates
-            task_outputs_ts, task_losses_ts, task_accuracies_ts = [], [], []
+            task_outputs_ts, task_losses_ts = [], []
+            task_precision_ts, task_recall_ts, task_f1_ts = [], [], []
 
             task_output_tr_pre = self.conv_layers(input_tr, weights)
             task_loss_tr_pre = self.loss_func(task_output_tr_pre, label_tr)
@@ -109,12 +111,20 @@ class MAML(tf.keras.Model):
             #############################
 
             # Compute accuracies from output predictions
-            task_accuracy_tr_pre = accuracy(tf.argmax(input=label_tr, axis=1), tf.argmax(input=tf.nn.softmax(task_output_tr_pre), axis=1))
+            label_dense_tr = tf.cast(tf.argmax(input=label_tr, axis=1), tf.int32)
+            preds_tr = tf.cast(tf.argmax(input=tf.nn.softmax(task_output_tr_pre), axis=1), tf.int32)
+            task_precision_tr_pre = precision(label_dense_tr, preds_tr)
+            task_recall_tr_pre = recall(label_dense_tr, preds_tr)
+            task_f1_tr_pre = fscore(label_dense_tr, preds_tr)
 
+            label_dense_ts = tf.cast(tf.argmax(input=label_ts, axis=1), tf.int32)
             for j in range(num_inner_updates):
-                task_accuracies_ts.append(accuracy(tf.argmax(input=label_ts, axis=1), tf.argmax(input=tf.nn.softmax(task_outputs_ts[j]), axis=1)))
+                preds_ts = tf.cast(tf.argmax(input=tf.nn.softmax(task_outputs_ts[j]), axis=1), tf.int32)
+                task_precision_ts.append(precision(label_dense_ts, preds_ts))
+                task_recall_ts.append(recall(label_dense_ts, preds_ts))
+                task_f1_ts.append(fscore(label_dense_ts, preds_ts))
 
-            task_output = [task_output_tr_pre, task_outputs_ts, task_loss_tr_pre, task_losses_ts, task_accuracy_tr_pre, task_accuracies_ts]
+            task_output = [task_output_tr_pre, task_outputs_ts, task_loss_tr_pre, task_losses_ts, task_precision_tr_pre, task_precision_ts, task_recall_tr_pre, task_recall_ts, task_f1_tr_pre, task_f1_ts]
             #tf.print("Iteration took {}s".format(time.time() - start))
             return task_output
 
@@ -122,9 +132,9 @@ class MAML(tf.keras.Model):
         # to initialize the batch norm vars, might want to combine this, and
         # not run idx 0 twice.
         unused = task_inner_loop((input_tr[0], input_ts[0], label_tr[0], label_ts[0]), False, meta_batch_size, num_inner_updates)
-        out_dtype = [tf.float32, [tf.float32] * num_inner_updates,
-                     tf.float32, [tf.float32] * num_inner_updates]
-        out_dtype.extend([tf.float32, [tf.float32] * num_inner_updates])
+        out_dtype = [tf.float32, [tf.float32] * num_inner_updates] * 5
+        #             tf.float32, [tf.float32] * num_inner_updates]
+        #out_dtype.extend([tf.float32, [tf.float32] * num_inner_updates])
         task_inner_loop_partial = partial(task_inner_loop, meta_batch_size=meta_batch_size, num_inner_updates=num_inner_updates)
         result = tf.map_fn(task_inner_loop_partial,
                            elems=(input_tr, input_ts, label_tr, label_ts),
@@ -149,36 +159,45 @@ def outer_train_step(inp, model, optim, meta_batch_size=25, num_inner_updates=1)
         result = model(inp, meta_batch_size=meta_batch_size,
                        num_inner_updates=num_inner_updates)
 
-        outputs_tr, outputs_ts, losses_tr_pre, losses_ts, accuracies_tr_pre, accuracies_ts = result
-
+        outputs_tr, outputs_ts, loss_tr_pre, losses_ts, precision_tr_pre, precision_ts, recall_tr_pre, recall_ts, f1_tr_pre, f1_ts = result
         total_losses_ts = [tf.reduce_mean(loss_ts) for loss_ts in losses_ts]
 
     gradients = outer_tape.gradient(
         total_losses_ts[-1], model.trainable_variables)
     optim.apply_gradients(zip(gradients, model.trainable_variables))
 
-    total_loss_tr_pre = tf.reduce_mean(losses_tr_pre)
-    total_accuracy_tr_pre = tf.reduce_mean(accuracies_tr_pre)
-    total_accuracies_ts = [tf.reduce_mean(
-        accuracy_ts) for accuracy_ts in accuracies_ts]
+    total_loss_tr_pre = tf.reduce_mean(loss_tr_pre)
+    #total_accuracy_tr_pre = tf.reduce_mean(accuracies_tr_pre)
+    #total_accuracies_ts = [tf.reduce_mean(
+    #    accuracy_ts) for accuracy_ts in accuracies_ts]
+    total_precision_tr_pre = tf.reduce_mean(precision_tr_pre)
+    total_precision_ts = [tf.reduce_mean(task_prec_ts) for task_prec_ts in precision_ts]
+    total_recall_tr_pre = tf.reduce_mean(recall_tr_pre)
+    total_recall_ts = [tf.reduce_mean(task_rec_ts) for task_rec_ts in recall_ts]
+    total_f1_tr_pre = tf.reduce_mean(f1_tr_pre)
+    total_f1_ts = [tf.reduce_mean(task_f1_ts) for task_f1_ts in f1_ts]
 
-    return outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_accuracy_tr_pre, total_accuracies_ts
+    return outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_precision_tr_pre, total_precision_ts, total_recall_tr_pre, total_recall_ts, total_f1_tr_pre, total_f1_ts 
 
 
 def outer_eval_step(inp, model, meta_batch_size=25, num_inner_updates=1):
     result = model(inp, meta_batch_size=meta_batch_size,
                    num_inner_updates=num_inner_updates)
 
-    outputs_tr, outputs_ts, losses_tr_pre, losses_ts, accuracies_tr_pre, accuracies_ts = result
+    outputs_tr, outputs_ts, loss_tr_pre, losses_ts, precision_tr_pre, precision_ts, recall_tr_pre, recall_ts, f1_tr_pre, f1_ts = result
 
-    total_loss_tr_pre = tf.reduce_mean(losses_tr_pre)
+
+    total_loss_tr_pre = tf.reduce_mean(loss_tr_pre)
     total_losses_ts = [tf.reduce_mean(loss_ts) for loss_ts in losses_ts]
 
-    total_accuracy_tr_pre = tf.reduce_mean(accuracies_tr_pre)
-    total_accuracies_ts = [tf.reduce_mean(
-        accuracy_ts) for accuracy_ts in accuracies_ts]
+    total_precision_tr_pre = tf.reduce_mean(precision_tr_pre)
+    total_precision_ts = [tf.reduce_mean(task_prec_ts) for task_prec_ts in precision_ts]
+    total_recall_tr_pre = tf.reduce_mean(recall_tr_pre)
+    total_recall_ts = [tf.reduce_mean(task_rec_ts) for task_rec_ts in recall_ts]
+    total_f1_tr_pre = tf.reduce_mean(f1_tr_pre)
+    total_f1_ts = [tf.reduce_mean(task_f1_ts) for task_f1_ts in f1_ts]
 
-    return outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_accuracy_tr_pre, total_accuracies_ts
+    return outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_precision_tr_pre, total_precision_ts, total_recall_tr_pre, total_recall_ts, total_f1_tr_pre, total_f1_ts
 
 
 def meta_train_fn(model, exp_string, meta_dataset, support_size=8, num_classes=7, meta_train_iterations=15000, meta_batch_size=16, log=True, logdir='/tmp/data', num_inner_updates=1, meta_lr=0.001, log_frequency=5, test_log_frequency=25):
@@ -186,22 +205,22 @@ def meta_train_fn(model, exp_string, meta_dataset, support_size=8, num_classes=7
 
     pre_accuracies, post_accuracies = [], []
     pre_loss, post_loss = [], []
-    #num_classes = data_generator.num_classes
+    pre_precision, post_precision = [], []
+    pre_recall, post_recall = [], []
+    pre_f1, post_f1 = [], []
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=meta_lr)
 
     plot_accuracies = []
     for itr in range(meta_train_iterations):
         #############################
-        #### YOUR CODE GOES HERE ####
 
         # sample a batch of training data and partition into
         # the support/training set (input_tr, label_tr) and the query/test set (input_ts, label_ts)
         # NOTE: The code assumes that the support and query sets have the same
         # number of examples.
 
-        X, y, y_debug = meta_dataset.sample_batch(
-            batch_size=meta_batch_size, split='train')
+        X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='train')
         X = tf.reshape(X, [meta_batch_size, support_size, -1])
         input_tr, input_ts = tf.split(X, 2, axis=1)
         single_labels = (np.packbits(y.astype(int), 2, 'little') - 1).reshape((len(y), -1))
@@ -213,17 +232,29 @@ def meta_train_fn(model, exp_string, meta_dataset, support_size=8, num_classes=7
         inp = (input_tr, input_ts, label_tr, label_ts)
         start = time.time()
         result = outer_train_step(inp, model, optimizer, meta_batch_size=meta_batch_size, num_inner_updates=num_inner_updates)
+        outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_precision_tr_pre, total_precision_ts, total_recall_tr_pre, total_recall_ts, total_f1_tr_pre, total_f1_ts = result
 
-        pre_accuracies.append(result[-2])
-        post_accuracies.append(result[-1][-1])
-        pre_loss.append(result[-4])
-        post_loss.append(result[-3][-1])
+        # log metrics here
+        #pre_accuracies.append(result[-2])
+        #post_accuracies.append(result[-1][-1])
+        pre_loss.append(result[2])
+        post_loss.append(result[3][-1])
+        pre_precision.append(result[4])
+        post_precision.append(result[5][-1])
+        pre_recall.append(result[6])
+        post_recall.append(result[7][-1])
+        pre_f1.append(result[8])
+        post_f1.append(result[9][-1])
 
         if (itr != 0) and itr % log_frequency == 0:
-            print_str = 'Iteration %d: pre-inner-loop train loss/accuracy: %.5f/%.5f, post-inner-loop validation loss/accuracy: %.5f/%.5f, time elapsed: %.4fs' % (itr, np.mean(pre_loss), np.mean(pre_accuracies), np.mean(post_loss), np.mean(post_accuracies), time.time() - start)
+            #print_str = 'Iteration %d: pre-inner-loop train loss/accuracy: %.5f/%.5f, post-inner-loop validation loss/accuracy: %.5f/%.5f, time elapsed: %.4fs' % (itr, np.mean(pre_loss), np.mean(pre_accuracies), np.mean(post_loss), np.mean(post_accuracies), time.time() - start)
+            print_str = "Iteration {}: pre-inner train loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, post-inner train loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, time elapsed: {:.4f}s".format(itr, np.mean(pre_loss), np.mean(pre_precision), np.mean(pre_recall), np.mean(pre_f1), np.mean(post_loss), np.mean(post_precision), np.mean(post_recall), np.mean(post_f1), time.time() - start)
             print(print_str)
             pre_accuracies, post_accuracies = [], []
             pre_loss, post_loss = [], []
+            pre_precision, post_precision = [], []
+            pre_recall, post_recall = [], []
+            pre_f1, post_f1 = [], []
 
         if (itr != 0) and itr % test_log_frequency == 0:
 
@@ -243,10 +274,12 @@ def meta_train_fn(model, exp_string, meta_dataset, support_size=8, num_classes=7
 
             inp = (input_tr, input_ts, label_tr, label_ts)
             result = outer_eval_step(inp, model, meta_batch_size=meta_batch_size, num_inner_updates=num_inner_updates)
+            outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_precision_tr_pre, total_precision_ts, total_recall_tr_pre, total_recall_ts, total_f1_tr_pre, total_f1_ts = result
 
-            print('Meta-validation pre-inner-loop train accuracy: %.5f, meta-validation post-inner-loop test accuracy: %.5f' % (result[-2], result[-1][-1]))
-
-            plot_accuracies.append(result[-1][-1])
+            #print('Meta-validation pre-inner-loop train accuracy: %.5f, meta-validation post-inner-loop test accuracy: %.5f' % (result[-2], result[-1][-1]))
+            eval_print_str = "Meta-val. pre-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, meta-val. post-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}".format(total_loss_tr_pre, total_precision_tr_pre, total_recall_tr_pre, total_f1_tr_pre, total_losses_ts, total_precision_ts, total_recall_ts, total_f1_ts)
+            print(eval_print_str)
+            #plot_accuracies.append(result[-1][-1])
 
     #plt.plot(np.arange(50, meta_train_iterations, 50), plot_accuracies)
     #plt.ylabel('Validation Accuracy')

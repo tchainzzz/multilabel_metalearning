@@ -50,3 +50,5 @@ class VanillaConvModel(tf.keras.layers.Layer):
         hidden4 = conv_block(hidden3, weights['conv4'], weights['b4'], self.bn4)
         hidden4 = tf.reduce_mean(input_tensor=hidden4, axis=[1, 2])
         return tf.matmul(hidden4, weights['w5']) + weights['b5']
+
+
