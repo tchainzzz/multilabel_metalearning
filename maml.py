@@ -347,7 +347,7 @@ def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, m
     print((means, stds, ci95))
 
 
-def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_path="../cs330-storage/SmallEarthNet", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25):
+def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_root="../cs330-storage/", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25):
     current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     log_dir = '../tensorboard_logs/' + current_time + '_train' if meta_train else '_test'
     os.makedirs(log_dir, exist_ok=True)
@@ -356,18 +356,15 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
     #  TODO: if args.multilabel_scheme == 'powerset'
     num_classes = 2**label_subset_size - 1
 
-    filter_files = ['../cs330-storage/patches_with_cloud_and_shadow.csv', '../cs330-storage/patches_with_seasonal_snow.csv']  # replace with your path
+    filter_files = [os.path.join(data_root, 'patches_with_cloud_and_shadow.csv'), os.path.join(data_root, 'patches_with_seasonal_snow.csv')]  # replace with your path
 
-
-
-    logging.info("Loading data...")
-    meta_dataset = load_data.MetaBigEarthNetTaskDataset(data_dir=data_path, filter_files=filter_files, support_size=2 * support_size, label_subset_size=label_subset_size, split_save_path="smallearthnet.pkl", split_file="smallearthnet.pkl")
+    data_dir = os.path.join(data_root, "SmallEarthNet")
+    meta_dataset = load_data.MetaBigEarthNetTaskDataset(data_dir=data_dir, filter_files=filter_files, support_size=2 * support_size, label_subset_size=label_subset_size, split_save_path="smallearthnet.pkl", split_file="smallearthnet.pkl")
 
     # set up MAML model
     dim_output = num_classes
     dim_input = (IMG_SIZE**2) * 3
 
-    logging.info("Building MAML model...")
     model = MAML(dim_input, dim_output, num_inner_updates=num_inner_updates, inner_update_lr=inner_update_lr, num_filters=num_filters, learn_inner_update_lr=learn_inner_update_lr)
 
     if meta_train_inner_update_lr == -1:
@@ -376,7 +373,6 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
     exp_string = 'supsize_' + str(support_size) + '.mbs_' + str(meta_batch_size) + '.inner_numstep_' + str(
         num_inner_updates) + '.inner_updatelr_' + str(meta_train_inner_update_lr) + '.learn_inner_update_lr_' + str(learn_inner_update_lr)
 
-    logging.info("Train/test starts.")
     if meta_train:
         meta_train_fn(model, exp_string, meta_dataset, writer, support_size, num_classes, meta_train_iterations, meta_batch_size, log, logdir, num_inner_updates, meta_lr, log_frequency=log_frequency, test_log_frequency=test_log_frequency)
     else:
@@ -390,7 +386,7 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
 
 
 def main(args):
-    run_maml(support_size=args.support_size, inner_update_lr=args.inner_update_lr, num_inner_updates=args.num_inner_updates, meta_train_iterations=args.iterations, learn_inner_update_lr=args.learn_inner_lr, meta_train=True, label_subset_size=args.label_subset_size, log_frequency=args.log_frequency, test_log_frequency=args.test_log_frequency)
+    run_maml(support_size=args.support_size, inner_update_lr=args.inner_update_lr, num_inner_updates=args.num_inner_updates, meta_train_iterations=args.iterations, learn_inner_update_lr=args.learn_inner_lr, meta_train=True, label_subset_size=args.label_subset_size, log_frequency=args.log_frequency, test_log_frequency=args.test_log_frequency, data_root=args.data_root)
 
 if __name__ == '__main__':
     args = get_args()
