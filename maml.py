@@ -36,10 +36,7 @@ import datetime
 
 seed = 123
 IMG_SIZE = 120
-current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-log_dir = '../tensorboard_logs/' + current_time + '_train' if meta_train else '_test'
-os.makedirs(log_dir, exist_ok=True)
-writer = SummaryWriter(log_dir=log_dir)
+
 
 class MAML(tf.keras.Model):
     def __init__(self, dim_input=1, dim_output=1, num_inner_updates=1, inner_update_lr=0.4, num_filters=32, learn_inner_update_lr=False):
@@ -205,7 +202,7 @@ def outer_eval_step(inp, model, meta_batch_size=25, num_inner_updates=1):
     return outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_precision_tr_pre, total_precision_ts, total_recall_tr_pre, total_recall_ts, total_f1_tr_pre, total_f1_ts
 
 
-def meta_train_fn(model, exp_string, meta_dataset, support_size=8, num_classes=7, meta_train_iterations=15000, meta_batch_size=16, log=True, logdir='/tmp/data', num_inner_updates=1, meta_lr=0.001, log_frequency=5, test_log_frequency=25):
+def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, num_classes=7, meta_train_iterations=15000, meta_batch_size=16, log=True, logdir='/tmp/data', num_inner_updates=1, meta_lr=0.001, log_frequency=5, test_log_frequency=25):
 
 
     pre_accuracies, post_accuracies = [], []
@@ -311,7 +308,7 @@ def meta_train_fn(model, exp_string, meta_dataset, support_size=8, num_classes=7
 NUM_META_TEST_POINTS = 600
 
 
-def meta_test_fn(model, data_generator, support_size=8, num_classes=7, meta_batch_size=25, num_inner_updates=1):
+def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, meta_batch_size=25, num_inner_updates=1):
 
     #num_classes = data_generator.num_classes
 
@@ -351,7 +348,10 @@ def meta_test_fn(model, data_generator, support_size=8, num_classes=7, meta_batc
 
 
 def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_path="../cs330-storage/SmallEarthNet", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25):
-
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    log_dir = '../tensorboard_logs/' + current_time + '_train' if meta_train else '_test'
+    os.makedirs(log_dir, exist_ok=True)
+    writer = SummaryWriter(log_dir=log_dir)
     # call data_generator and get data with k_shot*2 samples per class
     #  TODO: if args.multilabel_scheme == 'powerset'
     num_classes = 2**label_subset_size - 1
@@ -378,7 +378,7 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
 
     logging.info("Train/test starts.")
     if meta_train:
-        meta_train_fn(model, exp_string, meta_dataset, support_size, num_classes, meta_train_iterations, meta_batch_size, log, logdir, num_inner_updates, meta_lr, log_frequency=log_frequency, test_log_frequency=test_log_frequency)
+        meta_train_fn(model, exp_string, meta_dataset, writer, support_size, num_classes, meta_train_iterations, meta_batch_size, log, logdir, num_inner_updates, meta_lr, log_frequency=log_frequency, test_log_frequency=test_log_frequency)
     else:
         meta_batch_size = 1
 
@@ -386,7 +386,7 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
         print("Restoring model weights from ", model_file)
         model.load_weights(model_file)
 
-        meta_test_fn(model, meta_dataset, support_size, num_classes, meta_batch_size, num_inner_updates)
+        meta_test_fn(model, meta_dataset, writer, support_size, num_classes, meta_batch_size, num_inner_updates)
 
 
 def main(args):
