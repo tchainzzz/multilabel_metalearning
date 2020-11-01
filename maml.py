@@ -32,6 +32,7 @@ from tensorboardX import SummaryWriter
 
 import logging
 import datetime
+import pytz
 
 
 seed = 123
@@ -348,7 +349,10 @@ def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, m
 
 
 def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_path="../cs330-storage/SmallEarthNet", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25):
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    utc_now = pytz.utc.localize(datetime.datetime.utcnow())
+    pst_now = utc_now.astimezone(pytz.timezone("America/Los_Angeles"))    
+    current_time = pst_now.strftime("%Y-%m-%d-%H:%M:%S")
+    print(current_time)
     log_dir = '../tensorboard_logs/' + current_time + '_train' if meta_train else '_test'
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
