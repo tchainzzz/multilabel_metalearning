@@ -359,11 +359,17 @@ def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, m
     print("Mean meta-test recall:", np.mean(meta_test_recall), "+/-", 1.96 * np.std(meta_test_recall) / np.sqrt(NUM_META_TEST_POINTS))
     print("Mean meta-test F1:", np.mean(meta_test_f1), "+/-", 1.96 * np.std(meta_test_f1) / np.sqrt(NUM_META_TEST_POINTS))
 
-def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_root="../cs330-storage/", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25):
+
+def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_root="../cs330-storage/", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25, experiment_name=None):
     utc_now = pytz.utc.localize(datetime.datetime.utcnow())
     pst_now = utc_now.astimezone(pytz.timezone("America/Los_Angeles"))    
     current_time = pst_now.strftime("%Y-%m-%d-%H:%M:%S")
-    log_dir = '../tensorboard_logs/' + current_time + '_train' if meta_train else '_test'
+    experiment_tokens = [current_time]
+    if experiment_name: experiment_tokens.append(experiment_name)
+    experiment_tokens.append('train' if meta_train else 'test')
+    experiment_fullname = "_".join(experiment_tokens)
+
+    log_dir = '../tensorboard_logs/' + experiment_fullname
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
     # call data_generator and get data with k_shot*2 samples per class
@@ -400,7 +406,12 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
 
 
 def main(args):
-    run_maml(support_size=args.support_size, inner_update_lr=args.inner_update_lr, num_inner_updates=args.num_inner_updates, meta_train_iterations=args.iterations, learn_inner_update_lr=args.learn_inner_lr, meta_train=True, label_subset_size=args.label_subset_size, log_frequency=args.log_frequency, test_log_frequency=args.test_log_frequency, data_root=args.data_root)
+    run_maml(support_size=args.support_size, inner_update_lr=args.inner_update_lr,
+            num_inner_updates=args.num_inner_updates, meta_train_iterations=args.iterations,
+            learn_inner_update_lr=args.learn_inner_lr, meta_train=True,
+            label_subset_size=args.label_subset_size, log_frequency=args.log_frequency,
+            test_log_frequency=args.test_log_frequency, data_root=args.data_root,
+            experiment_name=args.experiment_name)
 
 if __name__ == '__main__':
     args = get_args()
