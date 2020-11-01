@@ -316,9 +316,9 @@ def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, m
     np.random.seed(1)
     random.seed(1)
 
-    meta_test_accuracies = []
+    meta_test_losses, meta_test_precision, meta_test_recall, meta_test_f1 = [],  [], [],  []
 
-    for _ in range(NUM_META_TEST_POINTS):
+    for itr in range(NUM_META_TEST_POINTS):
 
 
         # sample a batch of test data and partition it into
@@ -336,17 +336,28 @@ def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, m
         #############################
         inp = (input_tr, input_ts, label_tr, label_ts)
         result = outer_eval_step(inp, model, meta_batch_size=meta_batch_size, num_inner_updates=num_inner_updates)
+        outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_precision_tr_pre, total_precision_ts, total_recall_tr_pre, total_recall_ts, total_f1_tr_pre, total_f1_ts = result
 
-        meta_test_accuracies.append(result[-1][-1])
+        eval_print_str = "Meta-test pre-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, meta-test post-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}".format(total_loss_tr_pre, total_precision_tr_pre, total_recall_tr_pre, total_f1_tr_pre, total_losses_ts[-1], total_precision_ts[-1], total_recall_ts[-1], total_f1_ts[-1])
+        print(eval_print_str)
 
-    meta_test_accuracies = np.array(meta_test_accuracies)
-    means = np.mean(meta_test_accuracies)
-    stds = np.std(meta_test_accuracies)
-    ci95 = 1.96 * stds / np.sqrt(NUM_META_TEST_POINTS)
+        meta_test_losses.append(float(total_losses_ts[-1]))
+        meta_test_precision.append(float(total_precision_ts[-1]))
+        meta_test_recall.append(float(total_recall_ts[-1]))
+        meta_test_f1.append(float(total_f1_ts[-1]))
+        writer.add_scalar('Meta-test loss', float(total_losses_ts[-1]), itr)
+        writer.add_scalar('Meta-test precision', float(total_precision_ts[-1]), itr)
+        writer.add_scalar('Meta-test recall', float(total_recall_ts[-1]), itr)
+        writer.add_scalar('Meta-test F1', float(total_f1_ts[-1]), itr)
 
-    print('Mean meta-test accuracy/loss, stddev, and confidence intervals')
-    print((means, stds, ci95))
-
+    #meta_test_accuracies = np.array(meta_test_accuracies)
+    #means = np.mean(meta_test_accuracies)
+    #stds = np.std(meta_test_accuracies)
+    #ci95 = 1.96 * stds / np.sqrt(NUM_META_TEST_POINTS)
+    print("Mean meta-test loss:", np.mean(meta_test_losses), "+/-", 1.96 * np.std(meta_test_losses) / np.sqrt(NUM_META_TEST_POINTS))
+    print("Mean meta-test precision:", np.mean(meta_test_precision), "+/-", 1.96 * np.std(meta_test_precision) / np.sqrt(NUM_META_TEST_POINTS))
+    print("Mean meta-test recall:", np.mean(meta_test_recall), "+/-", 1.96 * np.std(meta_test_recall) / np.sqrt(NUM_META_TEST_POINTS))
+    print("Mean meta-test F1:", np.mean(meta_test_f1), "+/-", 1.96 * np.std(meta_test_f1) / np.sqrt(NUM_META_TEST_POINTS))
 
 def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_root="../cs330-storage/", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25):
     utc_now = pytz.utc.localize(datetime.datetime.utcnow())
