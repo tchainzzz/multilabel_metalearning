@@ -28,13 +28,15 @@ import load_data_tf as load_data
 from models import VanillaConvModel
 from utils import *
 from options import get_args
+from tensorboardX import SummaryWriter
 
-import sys
 import logging
+import datetime
 
 
 seed = 123
 IMG_SIZE = 120
+current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
 class MAML(tf.keras.Model):
     def __init__(self, dim_input=1, dim_output=1, num_inner_updates=1, inner_update_lr=0.4, num_filters=32, learn_inner_update_lr=False):
@@ -250,6 +252,12 @@ def meta_train_fn(model, exp_string, meta_dataset, support_size=8, num_classes=7
             #print_str = 'Iteration %d: pre-inner-loop train loss/accuracy: %.5f/%.5f, post-inner-loop validation loss/accuracy: %.5f/%.5f, time elapsed: %.4fs' % (itr, np.mean(pre_loss), np.mean(pre_accuracies), np.mean(post_loss), np.mean(post_accuracies), time.time() - start)
             print_str = "Iteration {}: pre-inner train loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, post-inner train loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, time elapsed: {:.4f}s".format(itr, np.mean(pre_loss), np.mean(pre_precision), np.mean(pre_recall), np.mean(pre_f1), np.mean(post_loss), np.mean(post_precision), np.mean(post_recall), np.mean(post_f1), time.time() - start)
             print(print_str)
+
+            writer.add_scalar('Inner loss', post_loss, itr)
+            writer.add_scalar('Inner precision', post_precision, itr)
+            writer.add_scalar('Inner recall', post_recall, itr)
+            writer.add_scalar('Inner F1', post_f1, itr)
+
             pre_accuracies, post_accuracies = [], []
             pre_loss, post_loss = [], []
             pre_precision, post_precision = [], []
@@ -279,6 +287,11 @@ def meta_train_fn(model, exp_string, meta_dataset, support_size=8, num_classes=7
             #print('Meta-validation pre-inner-loop train accuracy: %.5f, meta-validation post-inner-loop test accuracy: %.5f' % (result[-2], result[-1][-1]))
             eval_print_str = "Meta-val. pre-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, meta-val. post-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}".format(total_loss_tr_pre, total_precision_tr_pre, total_recall_tr_pre, total_f1_tr_pre, total_losses_ts[-1], total_precision_ts[-1], total_recall_ts[-1], total_f1_ts[-1])
             print(eval_print_str)
+
+            writer.add_scalar('Outer loss', total_losses_ts[-1], itr)
+            writer.add_scalar('Outer precision', total_precision_ts[-1], itr)
+            writer.add_scalar('Outer recall', total_recall_ts[-1], itr)
+            writer.add_scalar('Outer F1', total_f1_ts[-1], itr)
             #plot_accuracies.append(result[-1][-1])
 
     #plt.plot(np.arange(50, meta_train_iterations, 50), plot_accuracies)
@@ -335,6 +348,10 @@ def meta_test_fn(model, data_generator, support_size=8, num_classes=7, meta_batc
 
 
 def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_path="../cs330-storage/SmallEarthNet", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25):
+
+    log_dir = '../tensorboard_logs/' + current_time + '_train' if meta_train else '_test'
+    os.makedirs(log_dir, exist_ok=True)
+    writer = SummaryWriter(log_dir=log_dir)
 
     # call data_generator and get data with k_shot*2 samples per class
     #  TODO: if args.multilabel_scheme == 'powerset'
