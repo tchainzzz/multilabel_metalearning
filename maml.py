@@ -37,6 +37,9 @@ import datetime
 seed = 123
 IMG_SIZE = 120
 current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+log_dir = '../tensorboard_logs/' + current_time + '_train' if meta_train else '_test'
+os.makedirs(log_dir, exist_ok=True)
+writer = SummaryWriter(log_dir=log_dir)
 
 class MAML(tf.keras.Model):
     def __init__(self, dim_input=1, dim_output=1, num_inner_updates=1, inner_update_lr=0.4, num_filters=32, learn_inner_update_lr=False):
@@ -348,10 +351,6 @@ def meta_test_fn(model, data_generator, support_size=8, num_classes=7, meta_batc
 
 
 def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_path="../cs330-storage/SmallEarthNet", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25):
-
-    log_dir = '../tensorboard_logs/' + current_time + '_train' if meta_train else '_test'
-    os.makedirs(log_dir, exist_ok=True)
-    writer = SummaryWriter(log_dir=log_dir)
 
     # call data_generator and get data with k_shot*2 samples per class
     #  TODO: if args.multilabel_scheme == 'powerset'
