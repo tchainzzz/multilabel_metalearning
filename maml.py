@@ -347,7 +347,7 @@ def meta_test_fn(model, data_generator, support_size=8, num_classes=7, meta_batc
     print((means, stds, ci95))
 
 
-def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_path="../SmallEarthNet", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25):
+def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_path="../cs330-storage/SmallEarthNet", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25):
 
     log_dir = '../tensorboard_logs/' + current_time + '_train' if meta_train else '_test'
     os.makedirs(log_dir, exist_ok=True)
@@ -357,7 +357,7 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
     #  TODO: if args.multilabel_scheme == 'powerset'
     num_classes = 2**label_subset_size - 1
 
-    filter_files = ['../patches_with_cloud_and_shadow.csv', '../patches_with_seasonal_snow.csv']  # replace with your path
+    filter_files = ['../cs330-storage/patches_with_cloud_and_shadow.csv', '../cs330-storage/patches_with_seasonal_snow.csv']  # replace with your path
 
 
 
