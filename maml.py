@@ -288,10 +288,10 @@ def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, num_c
             eval_print_str = "Meta-val. pre-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, meta-val. post-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}".format(total_loss_tr_pre, total_precision_tr_pre, total_recall_tr_pre, total_f1_tr_pre, total_losses_ts[-1], total_precision_ts[-1], total_recall_ts[-1], total_f1_ts[-1])
             print(eval_print_str)
 
-            writer.add_scalar('Outer loss', total_losses_ts[-1], itr)
-            writer.add_scalar('Outer precision', total_precision_ts[-1], itr)
-            writer.add_scalar('Outer recall', total_recall_ts[-1], itr)
-            writer.add_scalar('Outer F1', total_f1_ts[-1], itr)
+            writer.add_scalar('Outer loss', float(total_losses_ts[-1]), itr)
+            writer.add_scalar('Outer precision', float(total_precision_ts[-1]), itr)
+            writer.add_scalar('Outer recall', float(total_recall_ts[-1]), itr)
+            writer.add_scalar('Outer F1', float(total_f1_ts[-1]), itr)
             #plot_accuracies.append(result[-1][-1])
 
     #plt.plot(np.arange(50, meta_train_iterations, 50), plot_accuracies)
