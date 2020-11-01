@@ -317,7 +317,7 @@ def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, m
 
     meta_test_losses, meta_test_precision, meta_test_recall, meta_test_f1 = [],  [], [],  []
 
-    for _ in range(NUM_META_TEST_POINTS):
+    for itr in range(NUM_META_TEST_POINTS):
 
 
         # sample a batch of test data and partition it into
@@ -344,6 +344,10 @@ def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, m
         meta_test_precision.append(float(total_precision_ts[-1]))
         meta_test_recall.append(float(total_recall_ts[-1]))
         meta_test_f1.append(float(total_f1_ts[-1]))
+        writer.add_scalar('Meta-test loss', float(total_losses_ts[-1]), itr)
+        writer.add_scalar('Meta-test precision', float(total_precision_ts[-1]), itr)
+        writer.add_scalar('Meta-test recall', float(total_recall_ts[-1]), itr)
+        writer.add_scalar('Meta-test F1', float(total_f1_ts[-1]), itr)
 
     #meta_test_accuracies = np.array(meta_test_accuracies)
     #means = np.mean(meta_test_accuracies)
