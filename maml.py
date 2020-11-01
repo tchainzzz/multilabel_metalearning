@@ -332,7 +332,7 @@ def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, m
         # number of examples.
 
         X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='test')
-        X = tf.reshape(X, [meta_batch_size, support_size, -1])
+        #X = tf.reshape(X, [meta_batch_size, support_size, -1])
         input_tr, input_ts = tf.split(X, 2, axis=1)
         single_labels = (np.packbits(y.astype(int), 2, 'little') - 1).reshape((len(y), -1))
         one_hot = np.eye(num_classes)[single_labels]
