@@ -10,6 +10,23 @@ def conv_block(inp, cweight, bweight, bn, activation=tf.nn.relu, residual=False)
     normed = activation(normed)
     return normed
 
+class VGGWrapper():
+    def __init__(self, dim_hidden, dim_output, img_size):
+        self.dim_hidden = dim_hidden
+        self.dim_output = dim_output
+        self.img_size = img_size
+        self.model = tf.keras.applications.VGG19(include_top=False, pooling='max', input_shape=(self.img_size, self.img_size, self.channels))
+
+        weight_initializer = tf.keras.initializers.GlorotUniform()
+        self.dense_weights = tf.Variable(weight_initializer(shape=[self.dim_hidden, self.dim_output]), name='dense:weights')
+        self.dense_bias = tf.Variable(tf.zeros([self.dim_output]), name='dense:bias')
+        self.weights = model.weights + [dense_weights, dense_bias]
+
+
+    def __call__(self, inp, weights):
+        out = self.model(inp)
+        return tf.matmul(out, self.dense_weights) + self.dense_bias
+
 
 class VanillaConvModel(tf.keras.layers.Layer):
     def __init__(self, channels, dim_hidden, dim_output, img_size):

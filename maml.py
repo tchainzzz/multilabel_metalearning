@@ -277,7 +277,7 @@ def meta_train_fn(model, exp_string, meta_dataset, support_size=8, num_classes=7
             outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_precision_tr_pre, total_precision_ts, total_recall_tr_pre, total_recall_ts, total_f1_tr_pre, total_f1_ts = result
 
             #print('Meta-validation pre-inner-loop train accuracy: %.5f, meta-validation post-inner-loop test accuracy: %.5f' % (result[-2], result[-1][-1]))
-            eval_print_str = "Meta-val. pre-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, meta-val. post-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}".format(total_loss_tr_pre, total_precision_tr_pre, total_recall_tr_pre, total_f1_tr_pre, total_losses_ts, total_precision_ts, total_recall_ts, total_f1_ts)
+            eval_print_str = "Meta-val. pre-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, meta-val. post-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}".format(total_loss_tr_pre, total_precision_tr_pre, total_recall_tr_pre, total_f1_tr_pre, total_losses_ts[-1], total_precision_ts[-1], total_recall_ts[-1], total_f1_ts[-1])
             print(eval_print_str)
             #plot_accuracies.append(result[-1][-1])
 
