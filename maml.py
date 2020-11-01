@@ -253,10 +253,10 @@ def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, num_c
             print_str = "Iteration {}: pre-inner train loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, post-inner train loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, time elapsed: {:.4f}s".format(itr, np.mean(pre_loss), np.mean(pre_precision), np.mean(pre_recall), np.mean(pre_f1), np.mean(post_loss), np.mean(post_precision), np.mean(post_recall), np.mean(post_f1), time.time() - start)
             print(print_str)
 
-            writer.add_scalar('Inner loss', post_loss, itr)
-            writer.add_scalar('Inner precision', post_precision, itr)
-            writer.add_scalar('Inner recall', post_recall, itr)
-            writer.add_scalar('Inner F1', post_f1, itr)
+            writer.add_scalar('Inner loss', np.mean(post_loss), itr)
+            writer.add_scalar('Inner precision', np.mean(post_precision), itr)
+            writer.add_scalar('Inner recall', np.mean(post_recall), itr)
+            writer.add_scalar('Inner F1', np.mean(post_f1), itr)
 
             pre_accuracies, post_accuracies = [], []
             pre_loss, post_loss = [], []
