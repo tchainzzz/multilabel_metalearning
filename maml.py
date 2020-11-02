@@ -88,7 +88,6 @@ class MAML(tf.keras.Model):
 
             # weights corresponds to the initial weights in MAML 
             weights = self.inner_model.model_weights.copy()
-            print(self.inner_model.model_weights)
 
             # the predicted outputs, loss values, and accuracy for the pre-update model (with the initial weights), evaluated on the inner loop training data
             task_output_tr_pre, task_loss_tr_pre = None, None
