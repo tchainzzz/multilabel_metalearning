@@ -18,16 +18,21 @@ class VGGWrapper(tf.keras.layers.Layer):
         self.img_size = img_size
         self.model = tf.keras.applications.VGG19(include_top=False, pooling='max', input_shape=(self.img_size, self.img_size, self.channels))
         vgg_output_shape = self.model.output_shape
+        self.vgg_weight_names = [layer.name for layer in self.model.trainable_variables]
         weight_initializer = tf.keras.initializers.GlorotUniform()
-        self.model_weights = dict([(layer.name, layer) for layer in self.model.weights])
+        self.model_weights = dict([(layer.name, layer) for layer in self.model.trainable_weights])
         self.model_weights['dense:weights'] = tf.Variable(weight_initializer(shape=[vgg_output_shape[-1], self.dim_output]), name='dense:weights')
         self.model_weights['dense:bias'] = tf.Variable(tf.zeros([self.dim_output]), name='dense:bias')
 
-
     def __call__(self, inp, weights):
         inp = tf.transpose(inp, perm=[0, 2, 3, 1])
-        out = self.model(inp)
-        return tf.matmul(out, self.model_weights['dense:weights']) + self.model_weights['dense:bias']
+        # populate VGG structure with these weights
+        vgg_weights = [tensor for w, tensor in weights.items() if w in self.vgg_weight_names]
+        temp_model = tf.keras.models.clone_model(self.model)
+
+        temp_model.set_weights(vgg_weights)
+        out = temp_model(inp)
+        return tf.matmul(out, weights['dense:weights']) + weights['dense:bias']
 
 
 class VanillaConvModel(tf.keras.layers.Layer):
@@ -63,7 +68,7 @@ class VanillaConvModel(tf.keras.layers.Layer):
     def call(self, inp, weights):
         channels = self.channels
         inp = tf.transpose(inp, perm=[0, 2, 3, 1])
-        inp = tf.reshape(inp, [-1, self.img_size, self.img_size, channels])
+        #inp = tf.reshape(inp, [-1, self.img_size, self.img_size, channels])
         hidden1 = conv_block(inp, weights['conv1'], weights['b1'], self.bn1)
         hidden2 = conv_block(hidden1, weights['conv2'], weights['b2'], self.bn2)
         hidden3 = conv_block(hidden2, weights['conv3'], weights['b3'], self.bn3)

@@ -88,6 +88,7 @@ class MAML(tf.keras.Model):
 
             # weights corresponds to the initial weights in MAML 
             weights = self.inner_model.model_weights.copy()
+            print(self.inner_model.model_weights)
 
             # the predicted outputs, loss values, and accuracy for the pre-update model (with the initial weights), evaluated on the inner loop training data
             task_output_tr_pre, task_loss_tr_pre = None, None
@@ -280,7 +281,7 @@ def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, num_c
             """
 
             X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='val')
-            X = tf.reshape(X, [meta_batch_size, support_size, -1])
+            #X = tf.reshape(X, [meta_batch_size, support_size, -1])
             input_tr, input_ts = tf.split(X, 2, axis=1)
             single_labels = (np.packbits(y.astype(int), 2,'little') - 1).reshape((len(y), -1))
             one_hot = np.eye(num_classes)[single_labels]
