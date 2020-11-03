@@ -10,22 +10,29 @@ def conv_block(inp, cweight, bweight, bn, activation=tf.nn.relu, residual=False)
     normed = activation(normed)
     return normed
 
-class VGGWrapper():
-    def __init__(self, dim_hidden, dim_output, img_size):
-        self.dim_hidden = dim_hidden
+class VGGWrapper(tf.keras.layers.Layer):
+    def __init__(self, channels, dim_hidden, dim_output, img_size):
+        super(VGGWrapper, self).__init__()
+        self.channels = channels
         self.dim_output = dim_output
         self.img_size = img_size
         self.model = tf.keras.applications.VGG19(include_top=False, pooling='max', input_shape=(self.img_size, self.img_size, self.channels))
-
+        vgg_output_shape = self.model.output_shape
+        self.vgg_weight_names = [layer.name for layer in self.model.trainable_variables]
         weight_initializer = tf.keras.initializers.GlorotUniform()
-        self.dense_weights = tf.Variable(weight_initializer(shape=[self.dim_hidden, self.dim_output]), name='dense:weights')
-        self.dense_bias = tf.Variable(tf.zeros([self.dim_output]), name='dense:bias')
-        self.weights = model.weights + [dense_weights, dense_bias]
-
+        self.model_weights = dict([(layer.name, layer) for layer in self.model.trainable_weights])
+        self.model_weights['dense:weights'] = tf.Variable(weight_initializer(shape=[vgg_output_shape[-1], self.dim_output]), name='dense:weights')
+        self.model_weights['dense:bias'] = tf.Variable(tf.zeros([self.dim_output]), name='dense:bias')
 
     def __call__(self, inp, weights):
-        out = self.model(inp)
-        return tf.matmul(out, self.dense_weights) + self.dense_bias
+        inp = tf.transpose(inp, perm=[0, 2, 3, 1])
+        # populate VGG structure with these weights
+        vgg_weights = [tensor for w, tensor in weights.items() if w in self.vgg_weight_names]
+        temp_model = tf.keras.models.clone_model(self.model)
+
+        temp_model.set_weights(vgg_weights)
+        out = temp_model(inp)
+        return tf.matmul(out, weights['dense:weights']) + weights['dense:bias']
 
 
 class VanillaConvModel(tf.keras.layers.Layer):
@@ -56,11 +63,12 @@ class VanillaConvModel(tf.keras.layers.Layer):
         self.bn4 = tf.keras.layers.BatchNormalization(name='bn4')
         weights['w5'] = tf.Variable(weight_initializer(shape=[self.dim_hidden, self.dim_output]), name='w5', dtype=dtype)
         weights['b5'] = tf.Variable(tf.zeros([self.dim_output]), name='b5')
-        self.conv_weights = weights
+        self.model_weights = weights
 
     def call(self, inp, weights):
         channels = self.channels
-        inp = tf.reshape(inp, [-1, self.img_size, self.img_size, channels])
+        inp = tf.transpose(inp, perm=[0, 2, 3, 1])
+        #inp = tf.reshape(inp, [-1, self.img_size, self.img_size, channels])
         hidden1 = conv_block(inp, weights['conv1'], weights['b1'], self.bn1)
         hidden2 = conv_block(hidden1, weights['conv2'], weights['b2'], self.bn2)
         hidden3 = conv_block(hidden2, weights['conv3'], weights['b3'], self.bn3)

@@ -16,4 +16,5 @@ def get_args():
     psr.add_argument("--data-root", type=str, default="../cs330-storage", help="Path to all data")
     psr.add_argument("--experiment-name", type=str, default=None, help="Name of experiment (logging)")
     psr.add_argument("--test", action='store_true')
+    psr.add_argument("--model-class-name", type=str, default="VanillaConvModel", help="Model class name (in models.py)")
     return psr.parse_args()

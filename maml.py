@@ -26,7 +26,7 @@ from functools import partial
 from tqdm import tqdm
 
 import load_data_tf as load_data
-from models import VanillaConvModel
+import models
 from utils import *
 from options import get_args
 from tensorboardX import SummaryWriter
@@ -41,7 +41,7 @@ IMG_SIZE = 120
 
 
 class MAML(tf.keras.Model):
-    def __init__(self, dim_input=1, dim_output=1, num_inner_updates=1, inner_update_lr=0.4, num_filters=32, learn_inner_update_lr=False):
+    def __init__(self, dim_input=1, dim_output=1, num_inner_updates=1, inner_update_lr=0.4, num_filters=32, learn_inner_update_lr=False, model='VanillaConvModel'):
         super(MAML, self).__init__()
         self.dim_input = dim_input
         self.dim_output = dim_output
@@ -64,12 +64,17 @@ class MAML(tf.keras.Model):
         # Define the weights - these should NOT be directly modified by the
         # inner training loop
         tf.random.set_seed(seed)
-        self.conv_layers = VanillaConvModel(self.channels, self.dim_hidden, self.dim_output, self.img_size)
+
+        if hasattr(models, model):
+            model_class = getattr(models, model)
+            self.inner_model = model_class(self.channels, self.dim_hidden, self.dim_output, self.img_size)
+        else:
+            raise ValueError("Model name '{}' is not supported!")
 
         self.learn_inner_update_lr = learn_inner_update_lr
         if self.learn_inner_update_lr:
             self.inner_update_lr_dict = {}
-            for key in self.conv_layers.conv_weights.keys():
+            for key in self.inner_model.model_weights.keys():
                 self.inner_update_lr_dict[key] = [
                     tf.Variable(self.inner_update_lr, name='inner_update_lr_%s_%d' %
                         (key, j)) for j in range(num_inner_updates)]
@@ -83,7 +88,7 @@ class MAML(tf.keras.Model):
             input_tr, input_ts, label_tr, label_ts = inp
 
             # weights corresponds to the initial weights in MAML 
-            weights = self.conv_layers.conv_weights
+            weights = self.inner_model.model_weights.copy()
 
             # the predicted outputs, loss values, and accuracy for the pre-update model (with the initial weights), evaluated on the inner loop training data
             task_output_tr_pre, task_loss_tr_pre = None, None
@@ -94,12 +99,12 @@ class MAML(tf.keras.Model):
             task_outputs_ts, task_losses_ts = [], []
             task_precision_ts, task_recall_ts, task_f1_ts = [], [], []
 
-            task_output_tr_pre = self.conv_layers(input_tr, weights)
+            task_output_tr_pre = self.inner_model(input_tr, weights)
             task_loss_tr_pre = self.loss_func(task_output_tr_pre, label_tr)
             for i in range(num_inner_updates):
                 with tf.GradientTape(persistent=False) as tape: # keep track of high-order derivs on train data only, and use those to update
                     for key in weights: tape.watch(weights[key])
-                    output_tr = self.conv_layers(input_tr, weights)
+                    output_tr = self.inner_model(input_tr, weights)
                     loss_tr = self.loss_func(output_tr, label_tr)
                 grads = dict(zip(weights.keys(), tape.gradient(loss_tr, list(weights.values())))) # might need to make a TF op 
                 if self.learn_inner_update_lr:
@@ -108,7 +113,7 @@ class MAML(tf.keras.Model):
                     weights = dict(zip(weights.keys(), [weights[key] - self.inner_update_lr * grads[key] for key in weights])) # might need to make a TF op? probably OK
 
                 # post-update metrics on test
-                output_ts = self.conv_layers(input_ts, weights)
+                output_ts = self.inner_model(input_ts, weights)
                 task_outputs_ts.append(output_ts) # TODO: Make TF op
                 task_losses_ts.append(self.loss_func(output_ts, label_ts)) # TODO: Make TF op
 
@@ -225,7 +230,7 @@ def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, num_c
         # number of examples.
 
         X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='train')
-        X = tf.reshape(X, [meta_batch_size, support_size, -1])
+        #X = tf.reshape(X, [meta_batch_size, support_size, -1])
         input_tr, input_ts = tf.split(X, 2, axis=1)
         single_labels = (np.packbits(y.astype(int), 2, 'little') - 1).reshape((len(y), -1))
         one_hot = np.eye(num_classes)[single_labels]
@@ -276,7 +281,7 @@ def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, num_c
             """
 
             X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='val')
-            X = tf.reshape(X, [meta_batch_size, support_size, -1])
+            #X = tf.reshape(X, [meta_batch_size, support_size, -1])
             input_tr, input_ts = tf.split(X, 2, axis=1)
             single_labels = (np.packbits(y.astype(int), 2,'little') - 1).reshape((len(y), -1))
             one_hot = np.eye(num_classes)[single_labels]
@@ -328,7 +333,7 @@ def meta_test_fn(model, meta_dataset, writer, support_size=8, num_classes=7, met
         # number of examples.
 
         X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='test')
-        X = tf.reshape(X, [meta_batch_size, support_size, -1])
+        #X = tf.reshape(X, [meta_batch_size, support_size, -1])
         input_tr, input_ts = tf.split(X, 2, axis=1)
         single_labels = (np.packbits(y.astype(int), 2, 'little') - 1).reshape((len(y), -1))
         one_hot = np.eye(num_classes)[single_labels]
@@ -361,7 +366,7 @@ def meta_test_fn(model, meta_dataset, writer, support_size=8, num_classes=7, met
     print("Mean meta-test F1:", np.mean(meta_test_f1), "+/-", 1.96 * np.std(meta_test_f1) / np.sqrt(NUM_META_TEST_POINTS))
 
 
-def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_root="../cs330-storage/", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25, experiment_name=None):
+def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_root="../cs330-storage/", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25, experiment_name=None, model_class="VanillaConvModel"):
     utc_now = pytz.utc.localize(datetime.datetime.utcnow())
     pst_now = utc_now.astimezone(pytz.timezone("America/Los_Angeles"))    
     current_time = pst_now.strftime("%Y-%m-%d-%H:%M:%S")
@@ -386,7 +391,7 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
     dim_output = num_classes
     dim_input = (IMG_SIZE**2) * 3
 
-    model = MAML(dim_input, dim_output, num_inner_updates=num_inner_updates, inner_update_lr=inner_update_lr, num_filters=num_filters, learn_inner_update_lr=learn_inner_update_lr)
+    model = MAML(dim_input, dim_output, num_inner_updates=num_inner_updates, inner_update_lr=inner_update_lr, num_filters=num_filters, learn_inner_update_lr=learn_inner_update_lr, model=model_class)
 
     if meta_train_inner_update_lr == -1:
         meta_train_inner_update_lr = inner_update_lr
@@ -412,7 +417,7 @@ def main(args):
             learn_inner_update_lr=args.learn_inner_lr, meta_train=not args.test,
             label_subset_size=args.label_subset_size, log_frequency=args.log_frequency,
             test_log_frequency=args.test_log_frequency, data_root=args.data_root,
-            experiment_name=args.experiment_name)
+            experiment_name=args.experiment_name, model_class=args.model_class_name)
 
 if __name__ == '__main__':
     args = get_args()
