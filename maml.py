@@ -23,6 +23,7 @@ import time
 import tensorflow as tf
 import numpy as np
 from functools import partial
+from tqdm import tqdm
 
 import load_data_tf as load_data
 import models
@@ -314,7 +315,7 @@ def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, num_c
 NUM_META_TEST_POINTS = 600
 
 
-def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, meta_batch_size=25, num_inner_updates=1):
+def meta_test_fn(model, meta_dataset, writer, support_size=8, num_classes=7, meta_batch_size=25, num_inner_updates=1):
 
     #num_classes = data_generator.num_classes
 
@@ -323,7 +324,7 @@ def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, m
 
     meta_test_losses, meta_test_precision, meta_test_recall, meta_test_f1 = [],  [], [],  []
 
-    for itr in range(NUM_META_TEST_POINTS):
+    for itr in tqdm(range(NUM_META_TEST_POINTS)):
 
 
         # sample a batch of test data and partition it into
@@ -343,8 +344,8 @@ def meta_test_fn(model, data_generator, writer, support_size=8, num_classes=7, m
         result = outer_eval_step(inp, model, meta_batch_size=meta_batch_size, num_inner_updates=num_inner_updates)
         outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_precision_tr_pre, total_precision_ts, total_recall_tr_pre, total_recall_ts, total_f1_tr_pre, total_f1_ts = result
 
-        eval_print_str = "Meta-test pre-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, meta-test post-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}".format(total_loss_tr_pre, total_precision_tr_pre, total_recall_tr_pre, total_f1_tr_pre, total_losses_ts[-1], total_precision_ts[-1], total_recall_ts[-1], total_f1_ts[-1])
-        print(eval_print_str)
+        #eval_print_str = "Meta-test pre-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}, meta-test post-inner loss/prec./rec./F1: {:.5f}/{:.5f}/{:.5f}/{:.5f}".format(total_loss_tr_pre, total_precision_tr_pre, total_recall_tr_pre, total_f1_tr_pre, total_losses_ts[-1], total_precision_ts[-1], total_recall_ts[-1], total_f1_ts[-1])
+        #print(eval_print_str)
 
         meta_test_losses.append(float(total_losses_ts[-1]))
         meta_test_precision.append(float(total_precision_ts[-1]))
@@ -413,7 +414,7 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
 def main(args):
     run_maml(support_size=args.support_size, inner_update_lr=args.inner_update_lr,
             num_inner_updates=args.num_inner_updates, meta_train_iterations=args.iterations,
-            learn_inner_update_lr=args.learn_inner_lr, meta_train=True,
+            learn_inner_update_lr=args.learn_inner_lr, meta_train=not args.test,
             label_subset_size=args.label_subset_size, log_frequency=args.log_frequency,
             test_log_frequency=args.test_log_frequency, data_root=args.data_root,
             experiment_name=args.experiment_name, model_class=args.model_class_name)
