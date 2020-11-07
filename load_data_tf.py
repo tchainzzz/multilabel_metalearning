@@ -20,7 +20,7 @@ _OPTICAL_MAX_VALUE = 2000. # Magic number some guys at Google figured out. Don't
 
 
 class BigEarthNetDataset():
-    def __init__(self, data_dir="../BigEarthNet-v1.0/", filter_files=["../patches_with_cloud_and_shadow.csv", "../patches_with_seasonal_snow.csv"], filter_data=True, mode='rgb', label_count_cache='./label_counts.pkl', val_prop=0.25, test_prop=0.2, split_file=None, split_save_path='splits.pkl', seed=42, meta=False):
+    def __init__(self, data_dir="../BigEarthNet-v1.0/", filter_files=["../patches_with_cloud_and_shadow.csv", "../patches_with_seasonal_snow.csv"], filter_data=True, mode='rgb', label_count_cache='./label_counts.pkl', val_prop=0.25, test_prop=0.2, split_file=None, split_save_path='splits.pkl', seed=42, meta=False, data_format='channels_last'):
         random.seed(42)
         mode = mode.lower()
         if mode not in ['rgb', 'all']:
@@ -32,6 +32,7 @@ class BigEarthNetDataset():
             self.bands = ['B01', 'B02', 'B03', 'B04', 'B05',
                                   'B06', 'B07', 'B08', 'B8A', 'B09', 'B11', 'B12']
         self.data_dir = data_dir
+        self.data_format = data_format
         self.patches = os.listdir(data_dir)
         self.patches.sort()
 
@@ -85,6 +86,8 @@ class BigEarthNetDataset():
         if self.mode == 'rgb':
             img = np.stack(band_stack) / _OPTICAL_MAX_VALUE # (C, W, H)
             img = np.clip(img, 0, 1)
+            if self.data_format == 'channels_last':
+                img = np.transpose(img, (1, 2, 0))
         else:
             raise NotImplementedError()
 
@@ -116,14 +119,14 @@ class BigEarthNetDataset():
 
 
 class MetaBigEarthNetTaskDataset():
-    def __init__(self, split='train', support_size=8, label_subset_size=3, data_dir="../BigEarthNet-v1.0/", filter_files=["../patches_with_cloud_and_shadow.csv", "../patches_with_seasonal_snow.csv"], filter_data=True, mode='rgb', label_count_cache='./label_counts.pkl', val_prop=0.25, test_prop=0.2, split_file=None, split_save_path='splits.pkl', seed=42):
+    def __init__(self, split='train', support_size=8, label_subset_size=3, data_dir="../BigEarthNet-v1.0/", filter_files=["../patches_with_cloud_and_shadow.csv", "../patches_with_seasonal_snow.csv"], filter_data=True, mode='rgb', label_count_cache='./label_counts.pkl', val_prop=0.25, test_prop=0.2, split_file=None, split_save_path='splits.pkl', seed=42, data_format='data_format'):
         super(MetaBigEarthNetTaskDataset, self).__init__()
         random.seed(seed)
         self.support_size = support_size
         self.label_subset_size = label_subset_size
         self.split = split
         self.data_dir = data_dir
-        self.dataset = BigEarthNetDataset(data_dir=data_dir, filter_files=filter_files, filter_data=filter_data, mode=mode, label_count_cache=label_count_cache, val_prop=val_prop, test_prop=test_prop, split_file=split_file, split_save_path=split_save_path, seed=seed, meta=True)
+        self.dataset = BigEarthNetDataset(data_dir=data_dir, filter_files=filter_files, filter_data=filter_data, mode=mode, label_count_cache=label_count_cache, val_prop=val_prop, test_prop=test_prop, split_file=split_file, split_save_path=split_save_path, seed=seed, meta=True, data_format=data_format)
         if split not in ['train', 'val', 'test']:
             raise Exception("Invalid split; must be one of 'train', 'val', or 'test'.")
         if support_size < 2:

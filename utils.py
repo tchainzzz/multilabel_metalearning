@@ -1,5 +1,8 @@
 import tensorflow as tf
 from sklearn.metrics import precision_score, recall_score
+import numpy as np
+import datetime
+import pytz
 
 # Loss utilities
 def cross_entropy_loss(pred, label):
@@ -7,10 +10,9 @@ def cross_entropy_loss(pred, label):
 
 
 def accuracy(labels, predictions):
-    tf.print(labels, predictions)
     return tf.reduce_mean(tf.cast(tf.equal(labels, predictions), dtype=tf.float32))
 
-
+@tf.function
 def precision(labels, predictions, average='macro'):
     unique_preds, indices = tf.unique(predictions)
     class_prec = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
@@ -48,6 +50,8 @@ def fscore(labels, predictions, beta=1):
     return tf.reduce_mean(class_f.stack())
 
 def convert_to_powerset(y):
+    _, _, subset_size = y.shape # (batch_size, support_size, label_subset_size)
+    num_classes = (1 << subset_size) - 1
     single_labels = (np.packbits(y.astype(int), 2, 'little') - 1).reshape((len(y), -1))
     one_hot = np.eye(num_classes)[single_labels]
     return one_hot
@@ -57,3 +61,17 @@ def support_query_split(X, y, converter, support_dim=1):
     y_new = converter(y)
     y_tr, y_ts = tf.split(y_new, 2, axis=support_dim)
     return X_tr, X_ts, y_tr, y_ts
+
+def generate_experiment_name(experiment_name, extra_tokens=[], timestamp=True):
+    experiment_tokens = []
+    if timestamp:
+        utc_now = pytz.utc.localize(datetime.datetime.utcnow())
+        pst_now = utc_now.astimezone(pytz.timezone("America/Los_Angeles"))
+        current_time = pst_now.strftime("%Y-%m-%d-%H:%M:%S")
+        experiment_tokens.append(current_time)
+    if experiment_name: 
+        experiment_tokens.append(experiment_name)
+    if len(extra_tokens):
+        experiment_tokens.extend(extra_tokens)
+    experiment_fullname = "_".join(experiment_tokens)
+    return experiment_fullname

@@ -32,8 +32,7 @@ from options import get_args
 from tensorboardX import SummaryWriter
 
 import logging
-import datetime
-import pytz
+
 
 
 seed = 123
@@ -367,13 +366,8 @@ def meta_test_fn(model, meta_dataset, writer, support_size=8, num_classes=7, met
 
 
 def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_root="../cs330-storage/", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25, experiment_name=None, model_class="VanillaConvModel"):
-    utc_now = pytz.utc.localize(datetime.datetime.utcnow())
-    pst_now = utc_now.astimezone(pytz.timezone("America/Los_Angeles"))    
-    current_time = pst_now.strftime("%Y-%m-%d-%H:%M:%S")
-    experiment_tokens = [current_time]
-    if experiment_name: experiment_tokens.append(experiment_name)
-    experiment_tokens.append('train' if meta_train else 'test')
-    experiment_fullname = "_".join(experiment_tokens)
+
+    experiment_fullname = generate_experiment_name(experiment_name, ['train' if meta_train else 'test'])
 
     log_dir = '../tensorboard_logs/' + experiment_fullname
     os.makedirs(log_dir, exist_ok=True)
