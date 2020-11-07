@@ -46,3 +46,14 @@ def fscore(labels, predictions, beta=1):
         fscore = tf.cond(tf.logical_and(tf.equal(prec, 0), tf.equal(rec, 0)), lambda: tf.constant(0.0), lambda: (1 + beta ** 2) * prec * rec / (beta ** 2 * prec + rec))
         class_f = class_f.write(i, fscore)
     return tf.reduce_mean(class_f.stack())
+
+def convert_to_powerset(y):
+    single_labels = (np.packbits(y.astype(int), 2, 'little') - 1).reshape((len(y), -1))
+    one_hot = np.eye(num_classes)[single_labels]
+    return one_hot
+
+def support_query_split(X, y, converter, support_dim=1):
+    X_tr, X_ts = tf.split(X, 2, axis=support_dim)
+    y_new = converter(y)
+    y_tr, y_ts = tf.split(y_new, 2, axis=support_dim)
+    return X_tr, X_ts, y_tr, y_ts
