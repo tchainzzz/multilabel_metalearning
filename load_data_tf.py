@@ -13,7 +13,7 @@ import warnings
 from collections import Counter
 
 import numpy as np
-
+from utils import normalize
 
 
 _OPTICAL_MAX_VALUE = 2000. # Magic number some guys at Google figured out. Don't touch.
@@ -99,6 +99,7 @@ class BigEarthNetDataset():
         labels = np.array([1 if cover_type in raw_labels else 0 for cover_type in self.counts.keys()])
         #if not self.meta:
         #    labels = torch.LongTensor(labels)
+        img = normalize(img)
         return img.astype(np.float32), labels
 
 

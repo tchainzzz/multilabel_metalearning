@@ -4,6 +4,10 @@ import numpy as np
 import datetime
 import pytz
 
+# magic numbers obtained from running `python3 calculate_mean.py`
+CHANNEL_MEANS = [0.19261545, 0.24894128, 0.1618804]
+CHANNEL_STDS = [0.17641555, 0.14091561, 0.11086669]
+
 # Loss utilities
 def cross_entropy_loss(pred, label):
     return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=tf.stop_gradient(label)))
@@ -75,3 +79,7 @@ def generate_experiment_name(experiment_name, extra_tokens=[], timestamp=True):
         experiment_tokens.extend(extra_tokens)
     experiment_fullname = "_".join(experiment_tokens)
     return experiment_fullname
+
+def normalize(img):
+    return (img - CHANNEL_MEANS) / (CHANNEL_STDS)
+
