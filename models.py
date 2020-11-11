@@ -67,7 +67,7 @@ class VanillaConvModel(tf.keras.layers.Layer):
 
     def call(self, inp, weights):
         channels = self.channels
-        inp = tf.transpose(inp, perm=[0, 2, 3, 1])
+        #inp = tf.transpose(inp, perm=[0, 2, 3, 1])
         #inp = tf.reshape(inp, [-1, self.img_size, self.img_size, channels])
         hidden1 = conv_block(inp, weights['conv1'], weights['b1'], self.bn1)
         hidden2 = conv_block(hidden1, weights['conv2'], weights['b2'], self.bn2)

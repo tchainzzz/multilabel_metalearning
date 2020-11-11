@@ -80,6 +80,12 @@ def generate_experiment_name(experiment_name, extra_tokens=[], timestamp=True):
     experiment_fullname = "_".join(experiment_tokens)
     return experiment_fullname
 
-def normalize(img):
+def normalize(img,data_format='channels_last'):
+    if data_format == 'channels_last':
+        means = CHANNEL_MEANS
+        stds = CHANNEL_STDS
+    elif data_format == 'channels_first':
+        means = CHANNEL_MEANS[:, np.newaxis, np.newaxis]
+        stds = CHANNEL_MEANS[:, np.newaxis, np.newaxis]
     return (img - CHANNEL_MEANS) / (CHANNEL_STDS)
 

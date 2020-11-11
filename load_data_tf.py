@@ -99,7 +99,7 @@ class BigEarthNetDataset():
         labels = np.array([1 if cover_type in raw_labels else 0 for cover_type in self.counts.keys()])
         #if not self.meta:
         #    labels = torch.LongTensor(labels)
-        img = normalize(img)
+        img = normalize(img, data_format=self.data_format)
         return img.astype(np.float32), labels
 
 
@@ -120,7 +120,7 @@ class BigEarthNetDataset():
 
 
 class MetaBigEarthNetTaskDataset():
-    def __init__(self, split='train', support_size=8, label_subset_size=3, data_dir="../BigEarthNet-v1.0/", filter_files=["../patches_with_cloud_and_shadow.csv", "../patches_with_seasonal_snow.csv"], filter_data=True, mode='rgb', label_count_cache='./label_counts.pkl', val_prop=0.25, test_prop=0.2, split_file=None, split_save_path='splits.pkl', seed=42, data_format='data_format'):
+    def __init__(self, split='train', support_size=8, label_subset_size=3, data_dir="../BigEarthNet-v1.0/", filter_files=["../patches_with_cloud_and_shadow.csv", "../patches_with_seasonal_snow.csv"], filter_data=True, mode='rgb', label_count_cache='./label_counts.pkl', val_prop=0.25, test_prop=0.2, split_file=None, split_save_path='splits.pkl', seed=42, data_format='channels_last'):
         super(MetaBigEarthNetTaskDataset, self).__init__()
         random.seed(seed)
         self.support_size = support_size
