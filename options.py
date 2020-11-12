@@ -17,4 +17,5 @@ def get_args():
     psr.add_argument("--experiment-name", type=str, default=None, help="Name of experiment (logging)")
     psr.add_argument("--test", action='store_true')
     psr.add_argument("--model-class-name", type=str, default="VanillaConvModel", help="Model class name (in models.py)")
+    psr.add_argument("--sampling-mode", type=str, choices=['permutation', 'greedy'], default='greedy', help="Multi-label task sampling framework")
     return psr.parse_args()

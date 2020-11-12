@@ -98,7 +98,7 @@ def train_step(images, labels, model, optim, eval=False):
     return predictions, loss
 
 
-def main(data_dir='../cs330-storage', num_classes=3, support_size=16, query_size=4, meta_batch_size=8, random_seed=42, iterations=1000, experiment_name=None, lr=1e-3, lr_schedule=False):
+def main(data_dir='../cs330-storage', num_classes=3, support_size=16, query_size=4, meta_batch_size=8, random_seed=42, iterations=1000, experiment_name=None, lr=1e-3, lr_schedule=False, sampling_mode='greedy'):
     random.seed(random_seed)
     np.random.seed(random_seed)
     tf.random.set_seed(random_seed)
@@ -124,12 +124,12 @@ def main(data_dir='../cs330-storage', num_classes=3, support_size=16, query_size
     test_accuracy = []
     for step in range(iterations):
         start = time.time()
-        X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='train')
+        X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='train', mode=sampling_mode)
         y = convert_to_powerset(y)
         _, ls = train_step(X, y, o, optim)
 
         if (step + 1) % 1 == 0:
-            X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='validation')
+            X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='validation', mode=sampling_mode)
             raw_y = convert_to_powerset(y)
             raw_pred, tls = train_step(X, raw_y, o, optim, eval=True)
 
@@ -171,6 +171,6 @@ def main(data_dir='../cs330-storage', num_classes=3, support_size=16, query_size
 
 if __name__ == '__main__':
     args = get_args()
-    main(data_dir=args.data_root, iterations=args.iterations, support_size=args.support_size, num_classes=args.label_subset_size, experiment_name=args.experiment_name, meta_batch_size=args.bs)
+    main(data_dir=args.data_root, iterations=args.iterations, support_size=args.support_size, num_classes=args.label_subset_size, experiment_name=args.experiment_name, meta_batch_size=args.bs, sampling_mode=args.sampling_mode)
 
 
