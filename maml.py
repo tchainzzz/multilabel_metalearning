@@ -95,7 +95,7 @@ class MAML(tf.keras.Model):
             task_precision_tr_pre, task_recall_tr_pre, task_f1_tr_pre = None, None, None
 
             # lists to keep track of outputs, losses, and accuracies of test data for each inner_update
-            # where task_outputs_ts[i], task_losses_ts[i], task_accuracies_ts[i] are the output, loss, and accuracy after i+1 inner gradient updates
+            # where task_outputs_ts[i], tasnum_classes=7k_losses_ts[i], task_accuracies_ts[i] are the output, loss, and accuracy after i+1 inner gradient updates
             task_outputs_ts, task_losses_ts = [], []
             task_precision_ts, task_recall_ts, task_f1_ts = [], [], []
 
@@ -211,7 +211,7 @@ def outer_eval_step(inp, model, meta_batch_size=25, num_inner_updates=1):
     return outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_precision_tr_pre, total_precision_ts, total_recall_tr_pre, total_recall_ts, total_f1_tr_pre, total_f1_ts
 
 
-def meta_train_fn(model, sampling_mode, exp_string, meta_dataset, writer, support_size=8, num_classes=7, meta_train_iterations=15000, meta_batch_size=16, log=True, logdir='/tmp/data', num_inner_updates=1, meta_lr=0.001, log_frequency=5, test_log_frequency=25, multi='powerset'):
+def meta_train_fn(model, sampling_mode, exp_string, meta_dataset, writer, support_size=8, meta_train_iterations=15000, meta_batch_size=16, log=True, logdir='/tmp/data', num_inner_updates=1, meta_lr=0.001, log_frequency=5, test_log_frequency=25, multi='powerset'):
 
 
     pre_accuracies, post_accuracies = [], []
@@ -324,7 +324,7 @@ def meta_train_fn(model, sampling_mode, exp_string, meta_dataset, writer, suppor
 NUM_META_TEST_POINTS = 600
 
 
-def meta_test_fn(model, meta_dataset, sampling_mode, writer, support_size=8, num_classes=7, meta_batch_size=25, num_inner_updates=1, multi='powerset'):
+def meta_test_fn(model, meta_dataset, sampling_mode, writer, support_size=8, meta_batch_size=25, num_inner_updates=1, multi='powerset'):
     #num_classes = data_generator.num_classes
 
     np.random.seed(1)
@@ -404,7 +404,7 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
         num_inner_updates) + '.inner_updatelr_' + str(meta_train_inner_update_lr) + '.learn_inner_update_lr_' + str(learn_inner_update_lr)
 
     if meta_train:
-        meta_train_fn(model, sampling_mode, exp_string, meta_dataset, writer, support_size, num_classes, meta_train_iterations, meta_batch_size, log, logdir, num_inner_updates, meta_lr, log_frequency=log_frequency, test_log_frequency=test_log_frequency, multi = multilabel_scheme)
+        meta_train_fn(model, sampling_mode, exp_string, meta_dataset, writer, support_size, meta_train_iterations, meta_batch_size, log, logdir, num_inner_updates, meta_lr, log_frequency=log_frequency, test_log_frequency=test_log_frequency, multi = multilabel_scheme)
     else:
         meta_batch_size = 1
 
@@ -412,7 +412,7 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
         print("Restoring model weights from ", model_file)
         model.load_weights(model_file)
 
-        meta_test_fn(model, sampling_mode, meta_dataset, writer, support_size, num_classes, meta_batch_size, num_inner_updates, multi = multilabel_scheme)
+        meta_test_fn(model, sampling_mode, meta_dataset, writer, support_size, meta_batch_size, num_inner_updates, multi = multilabel_scheme)
 
 
 def main(args):

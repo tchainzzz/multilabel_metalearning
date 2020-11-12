@@ -26,11 +26,12 @@ def precision(labels, predictions, multi='power'):
             prec = tf.reduce_mean(tf.cast(tf.equal(labels[predictions == pred], predictions[predictions==pred]), dtype=tf.float32))
             class_prec = class_prec.write(i, prec)
     elif multi == 'binary':
-        i = 0
-        for class_labels, class_predictions in zip(tf.split(labels, 1, axis=-1), tf.split(predictions, 1, axis=-1)):
+        _, n_classes = labels.shape
+        for i in range(n_classes):
+            class_labels = labels[:, i]
+            class_predictions = predictions[:, i]
             prec = tf.reduce_mean(tf.cast(tf.equal(labels[class_predictions == 1], predictions[class_predictions == 1]), dtype=tf.float32))
             class_prec = class_prec.write(i, prec)
-            i += 1
     else:
         raise NotImplementedError()
     return tf.reduce_mean(class_prec.stack())
@@ -45,8 +46,11 @@ def recall(labels, predictions, multi='power'):
             rec = tf.reduce_mean(tf.cast(tf.equal(labels[labels == lbl], predictions[labels == lbl]), dtype=tf.float32))
             class_rec = class_rec.write(i, rec)
     elif multi == 'binary':
-        i = 0
-        for i, (class_labels, class_predictions) in enumerate(zip(tf.split(labels, 1, axis=-1), tf.split(predictions, 1, axis=-1))):
+        _, n_classes = labels.shape
+        for i in range(n_classes):
+            class_labels = labels[:, i]
+            class_predictions = predictions[:, i]
+
             rec = tf.reduce_mean(tf.cast(tf.equal(labels[labels == 1], predictions[labels == 1]), dtype=tf.float32))
             class_prec = class_prec.write(i, rec)
     else:
@@ -70,7 +74,10 @@ def fscore(labels, predictions, multi='power', beta=1):
             fscore = tf.cond(tf.logical_and(tf.equal(prec, 0), tf.equal(rec, 0)), lambda: tf.constant(0.0), lambda: (1 + beta ** 2) * prec * rec / (beta ** 2 * prec + rec))
             class_f = class_f.write(i, fscore)
     elif multi == 'binary':
-        for i, (class_labels, class_predictions) in enumerate(zip(tf.split(labels, 1, axis=-1), tf.split(predictions, 1, axis=-1))):
+        _, n_classes = labels.shape
+        for i in range(n_classes):
+            class_labels = labels[:, i]
+            class_predictions = predictions[:, i]
             prec = tf.reduce_mean(tf.cast(tf.equal(labels[class_predictions == 1], predictions[class_predictions == 1]), dtype=tf.float32))
             rec = tf.reduce_mean(tf.cast(tf.equal(labels[labels == 1], predictions[labels == 1]), dtype=tf.float32))
             fscore = tf.cond(tf.logical_and(tf.equal(prec, 0), tf.equal(rec, 0)), lambda: tf.constant(0.0), lambda: (1 + beta ** 2) * prec * rec / (beta ** 2 * prec + rec))
