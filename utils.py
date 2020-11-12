@@ -17,40 +17,77 @@ def accuracy(labels, predictions):
     return tf.reduce_mean(tf.cast(tf.equal(labels, predictions), dtype=tf.float32))
 
 @tf.function
-def precision(labels, predictions, average='macro'):
-    unique_preds, indices = tf.unique(predictions)
+def precision(labels, predictions, multi='powerset'):
     class_prec = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
-    for i in range(len(unique_preds)):
-        pred = unique_preds[i]
-        prec = tf.reduce_mean(tf.cast(tf.equal(labels[predictions == pred], predictions[predictions==pred]), dtype=tf.float32))
-        class_prec = class_prec.write(i, prec)
+    if multi == 'powerset':
+        unique_preds, indices = tf.unique(predictions)
+        for i in range(len(unique_preds)):
+            pred = unique_preds[i]
+            prec = tf.reduce_mean(tf.cast(tf.equal(labels[predictions == pred], predictions[predictions==pred]), dtype=tf.float32))
+            class_prec = class_prec.write(i, prec)
+    elif multi == 'binary':
+        _, n_classes = labels.shape
+        for i in range(n_classes):
+            class_labels = labels[:, i]
+            class_predictions = predictions[:, i]
+            prec_mask = tf.cast(tf.equal(class_labels[class_predictions == 1], class_predictions[class_predictions == 1]), dtype=tf.float32)
+            prec = tf.cond(tf.equal(tf.size(prec_mask), 0), lambda: tf.constant(0.0), lambda: tf.reduce_mean(prec_mask))
+            class_prec = class_prec.write(i, prec)
+    else:
+        raise NotImplementedError()
     return tf.reduce_mean(class_prec.stack())
 
 @tf.function
-def recall(labels, predictions, average='macro'):
-    unique_labels, indices = tf.unique(labels)
+def recall(labels, predictions, multi='powerset'):
     class_rec = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
-    for i in range(len(unique_labels)):
-        lbl = unique_labels[i]
-        rec = tf.reduce_mean(tf.cast(tf.equal(labels[labels == lbl], predictions[labels == lbl]), dtype=tf.float32))
-        class_rec = class_rec.write(i, rec)
+    if multi == 'powerset':
+        unique_labels, indices = tf.unique(labels)
+        for i in range(len(unique_labels)):
+            lbl = unique_labels[i]
+            rec = tf.reduce_mean(tf.cast(tf.equal(labels[labels == lbl], predictions[labels == lbl]), dtype=tf.float32))
+            class_rec = class_rec.write(i, rec)
+    elif multi == 'binary':
+        _, n_classes = labels.shape
+        for i in range(n_classes):
+            class_labels = labels[:, i]
+            class_predictions = predictions[:, i]
 
+            rec_mask = tf.cast(tf.equal(class_labels[class_labels == 1], class_predictions[class_labels == 1]), dtype=tf.float32)
+            rec = tf.cond(tf.equal(tf.size(rec_mask), 0), lambda: tf.constant(0.0), lambda: tf.reduce_mean(rec_mask))
+            class_rec = class_rec.write(i, rec)
+    else:
+        raise NotImplementedError()
     return tf.reduce_mean(class_rec.stack())
 
 @tf.function
-def fscore(labels, predictions, beta=1):
-    unique_preds, _ = tf.unique(predictions)
-    unique_labels, _ = tf.unique(labels)
-    unique_tokens, _ = tf.unique(tf.concat([unique_preds, unique_labels], axis=0))
+def fscore(labels, predictions, multi='powerset', beta=1):
+
     class_f = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
-    for i in range(len(unique_tokens)):
-        curr_class = unique_tokens[i]
-        pred_mask = tf.cast(tf.equal(labels[predictions == curr_class], predictions[predictions == curr_class]), dtype=tf.float32)
-        label_mask = tf.cast(tf.equal(labels[labels == curr_class], predictions[labels == curr_class]), dtype=tf.float32)
-        prec = tf.cond(tf.equal(tf.size(pred_mask), 0), lambda: tf.constant(0.0), lambda: tf.reduce_mean(pred_mask))
-        rec = tf.cond(tf.equal(tf.size(label_mask), 0), lambda: tf.constant(0.0), lambda: tf.reduce_mean(label_mask))
-        fscore = tf.cond(tf.logical_and(tf.equal(prec, 0), tf.equal(rec, 0)), lambda: tf.constant(0.0), lambda: (1 + beta ** 2) * prec * rec / (beta ** 2 * prec + rec))
-        class_f = class_f.write(i, fscore)
+    if multi == 'powerset':
+        unique_preds, _ = tf.unique(predictions)
+        unique_labels, _ = tf.unique(labels)
+        unique_tokens, _ = tf.unique(tf.concat([unique_preds, unique_labels], axis=0))
+        for i in range(len(unique_tokens)):
+            curr_class = unique_tokens[i]
+            pred_mask = tf.cast(tf.equal(labels[predictions == curr_class], predictions[predictions == curr_class]), dtype=tf.float32)
+            label_mask = tf.cast(tf.equal(labels[labels == curr_class], predictions[labels == curr_class]), dtype=tf.float32)
+            prec = tf.cond(tf.equal(tf.size(pred_mask), 0), lambda: tf.constant(0.0), lambda: tf.reduce_mean(pred_mask))
+            rec = tf.cond(tf.equal(tf.size(label_mask), 0), lambda: tf.constant(0.0), lambda: tf.reduce_mean(label_mask))
+            fscore = tf.cond(tf.logical_and(tf.equal(prec, 0), tf.equal(rec, 0)), lambda: tf.constant(0.0), lambda: (1 + beta ** 2) * prec * rec / (beta ** 2 * prec + rec))
+            class_f = class_f.write(i, fscore)
+    elif multi == 'binary':
+        _, n_classes = labels.shape
+        for i in range(n_classes):
+            class_labels = labels[:, i]
+            class_predictions = predictions[:, i]
+            prec_mask = tf.cast(tf.equal(class_labels[class_predictions == 1], class_predictions[class_predictions == 1]), dtype=tf.float32)
+            prec = tf.cond(tf.equal(tf.size(prec_mask), 0), lambda: tf.constant(0.0), lambda: tf.reduce_mean(prec_mask))
+            rec_mask = tf.cast(tf.equal(class_labels[class_labels == 1], class_predictions[class_labels == 1]), dtype=tf.float32)
+            rec = tf.cond(tf.equal(tf.size(rec_mask), 0), lambda: tf.constant(0.0), lambda: tf.reduce_mean(rec_mask))
+            fscore = tf.cond(tf.logical_and(tf.equal(prec, 0), tf.equal(rec, 0)), lambda: tf.constant(0.0), lambda: (1 + beta ** 2) * prec * rec / (beta ** 2 * prec + rec))
+            class_f = class_f.write(i, fscore)
+    else:
+        raise NotImplementedError()
     return tf.reduce_mean(class_f.stack())
 
 def convert_to_powerset(y):
@@ -58,7 +95,7 @@ def convert_to_powerset(y):
     num_classes = (1 << subset_size) - 1
     single_labels = (np.packbits(y.astype(int), 2, 'little') - 1).reshape((len(y), -1))
     one_hot = np.eye(num_classes)[single_labels]
-    return one_hot
+    return one_hot.astype(np.float32)
 
 def convert_to_bin_rel(y):
     return tf.stack([y,1-y], axis = -1)

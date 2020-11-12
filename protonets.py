@@ -36,11 +36,10 @@ class ProtoNet(tf.keras.Model):
         return out
 
 
-def protoloss(x_latent, q_latent, labels_onehot, num_classes, num_support, num_queries):
+def ProtoLoss(x_latent, q_latent, labels_onehot, num_classes, num_support, num_queries):
     # return the cross-entropy loss and accuracy
     tf.random.shuffle(q_latent)
-    centroids = tf.reduce_mean(tf.reshape(
-        x_latent, (num_classes, num_support, -1)), 1)
+    centroids = tf.reduce_mean(tf.reshape(x_latent, (num_classes, num_support, -1)), 1)
     # reduce along "classes" dim to get per-class means. output [N, D]
 
     # procedure: transform centroids to [n*q, n, d] via a nqx repeat op
@@ -64,10 +63,12 @@ def protoloss(x_latent, q_latent, labels_onehot, num_classes, num_support, num_q
 
 
 def proto_net_train_step(model, optim, x, q, labels_ph):
-    num_classes, num_support, im_height, im_width, channels = x.shape
-    num_queries = q.shape[1]
-    x = tf.reshape(x, [-1, im_height, im_width, channels])
-    q = tf.reshape(q, [-1, im_height, im_width, channels])
+    print(x.shape, q.shape)
+    assert False
+    num_support, im_height, im_width, channels = x.shape
+    num_queries = q.shape[0]
+    #x = tf.reshape(x, [-1, im_height, im_width, channels])
+    #q = tf.reshape(q, [-1, im_height, im_width, channels])
 
     with tf.GradientTape() as tape:
         x_latent = model(x)
@@ -80,20 +81,20 @@ def proto_net_train_step(model, optim, x, q, labels_ph):
 
 
 def proto_net_eval(model, x, q, labels_ph):
-    num_classes, num_support, im_height, im_width, channels = x.shape
+
+    num_support, im_height, im_width, channels = x.shape
     num_queries = q.shape[1]
-    x = tf.reshape(x, [-1, im_height, im_width, channels])
-    q = tf.reshape(q, [-1, im_height, im_width, channels])
+    #x = tf.reshape(x, [-1, im_height, im_width, channels])
+    #q = tf.reshape(q, [-1, im_height, im_width, channels])
 
     x_latent = model(x)
     q_latent = model(q)
-    ce_loss, acc = ProtoLoss(
-        x_latent, q_latent, labels_ph, num_classes, num_support, num_queries)
+    ce_loss, acc = ProtoLoss(x_latent, q_latent, labels_ph, num_classes, num_support, num_queries)
 
     return ce_loss, acc
 
 
-def run_protonet(data_path='./omniglot_resized', n_way=3, k_shot=8, n_query=5):
+def run_protonet(data_dir='../cs330-storage', n_way=3, k_shot=8, n_query=8):
     n_epochs = 20
     n_episodes = 100
 
@@ -118,17 +119,14 @@ def run_protonet(data_path='./omniglot_resized', n_way=3, k_shot=8, n_query=5):
             _, s, h, w, c = X.shape
             X = tf.squeeze(X, axis=0)
             support, query = X[:k_shot, ...], X[k_shot:, ...]
-            labels = tf.squeeze(y[:, :, :k_shot, :], 0)
+            labels = tf.squeeze(y[:, :, k_shot:, :], 0)
             ls, ac = proto_net_train_step(model, optimizer, x=support, q=query, labels_ph=labels)
         if (epi+1) % 50 == 0:
-            images, labels = meta_dataset.sample_batch(meta_batch_size=1, split='val')
-            support, query = tf.reshape(images[:, :, :k_shot, :], (n_way, k_shot, im_height, im_width, channels)), tf.reshape(
-                images[:, :, k_shot:, :], (n_way, n_query, im_height, im_width, channels))
+            X, y, y_debug = meta_dataset.sample_batch(meta_batch_size=1, split='val')
+            support, query = X[:k_shot, ...], X[k_shot, ...]
             labels = tf.squeeze(labels[:, :, k_shot:, :], 0)
-            val_ls, val_ac = proto_net_eval(
-                model, x=support, q=query, labels_ph=labels)
-            print('[epoch {}/{}, episode {}/{}] => meta-training loss: {:.5f}, meta-training acc: {:.5f}, meta-val loss: {:.5f}, meta-val acc: {:.5f}'.format(
-                ep+1, n_epochs, epi+1, n_episodes, ls.numpy(), ac.numpy(), val_ls.numpy(), val_ac.numpy()))
+            val_ls, val_ac = proto_net_eval(model, x=support, q=query, labels_ph=labels)
+            print('[epoch {}/{}, episode {}/{}] => meta-training loss: {:.5f}, meta-training acc: {:.5f}, meta-val loss: {:.5f}, meta-val acc: {:.5f}'.format(ep+1, n_epochs, epi+1, n_episodes, ls.numpy(), ac.numpy(), val_ls.numpy(), val_ac.numpy()))
         if (epi + 1) % 100 == 0:
             train_losses.append(ls.numpy())
             train_accs.append(ac.numpy())
@@ -137,16 +135,13 @@ def run_protonet(data_path='./omniglot_resized', n_way=3, k_shot=8, n_query=5):
     print('Testing...')
     meta_test_accuracies = []
     for epi in range(n_meta_test_episodes):
-        images, labels = data_generator.sample_batch(
-            'meta_test', 1, shuffle=False)
-        support, query = tf.reshape(images[:, :, :k_meta_test_shot, :], (n_meta_test_way, k_meta_test_shot, im_height, im_width, channels)), tf.reshape(
-            images[:, :, k_meta_test_shot:, :], (n_meta_test_way, n_meta_test_query, im_height, im_width, channels))
+        X, y, y_debug = meta_dataset.sample_batch(meta_batch_size=1, split='test')
+        support, query = X[:k_shot, ...], X[k_shot, ...]
         labels = tf.squeeze(labels[:, :, k_meta_test_shot:, :], 0)
         ls, ac = proto_net_eval(model, x=support, q=query, labels_ph=labels)
         meta_test_accuracies.append(ac)
         if (epi+1) % 50 == 0:
-            print('[meta-test episode {}/{}] => loss: {:.5f}, acc: {:.5f}'.format(epi +
-                                                                                  1, n_meta_test_episodes, ls, ac))
+            print('[meta-test episode {}/{}] => loss: {:.5f}, acc: {:.5f}'.format(epi + 1, n_meta_test_episodes, ls, ac))
     avg_acc = np.mean(meta_test_accuracies)
     stds = np.std(meta_test_accuracies)
     print(
@@ -156,4 +151,4 @@ def run_protonet(data_path='./omniglot_resized', n_way=3, k_shot=8, n_query=5):
 from options import *
 if __name__ == '__main__':
     args = get_args()
-    results = run_protonet(args.data_dir, n_way=n, k_shot=k, n_query=q, n_meta_test_way=test_n, k_meta_test_shot=test_k, n_meta_test_query=test_q)
+    results = run_protonet(args.data_root, n_way=args.label_subset_size, k_shot=args.support_size, n_query=args.support_size, n_meta_test_way=args.label_subset_size, k_meta_test_shot=args.support_size, n_meta_test_query=args.support_size)

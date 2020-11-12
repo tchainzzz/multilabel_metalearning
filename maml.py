@@ -95,7 +95,7 @@ class MAML(tf.keras.Model):
             task_precision_tr_pre, task_recall_tr_pre, task_f1_tr_pre = None, None, None
 
             # lists to keep track of outputs, losses, and accuracies of test data for each inner_update
-            # where task_outputs_ts[i], task_losses_ts[i], task_accuracies_ts[i] are the output, loss, and accuracy after i+1 inner gradient updates
+            # where task_outputs_ts[i], tasnum_classes=7k_losses_ts[i], task_accuracies_ts[i] are the output, loss, and accuracy after i+1 inner gradient updates
             task_outputs_ts, task_losses_ts = [], []
             task_precision_ts, task_recall_ts, task_f1_ts = [], [], []
 
@@ -104,9 +104,7 @@ class MAML(tf.keras.Model):
             for i in range(num_inner_updates):
                 with tf.GradientTape(persistent=False) as tape: # keep track of high-order derivs on train data only, and use those to update
                     for key in weights: tape.watch(weights[key])
-                    output_tr = self.inner_model(input_tr, weights)
-                    print("output:", output_tr)
-                    print("labels:", label_tr)
+                    output_tr = self.inner_model(input_tr, weights) 
                     loss_tr = self.loss_func(output_tr, label_tr)
                 grads = dict(zip(weights.keys(), tape.gradient(loss_tr, list(weights.values())))) # might need to make a TF op 
                 if self.learn_inner_update_lr:
@@ -124,16 +122,16 @@ class MAML(tf.keras.Model):
             # Compute accuracies from output predictions
             label_dense_tr = tf.cast(tf.argmax(input=label_tr, axis=-1), tf.int32)
             preds_tr = tf.cast(tf.argmax(input=tf.nn.softmax(task_output_tr_pre), axis=-1), tf.int32)
-            task_precision_tr_pre = precision(label_dense_tr, preds_tr)
-            task_recall_tr_pre = recall(label_dense_tr, preds_tr)
-            task_f1_tr_pre = fscore(label_dense_tr, preds_tr)
+            task_precision_tr_pre = precision(label_dense_tr, preds_tr, multi=self.multi)
+            task_recall_tr_pre = recall(label_dense_tr, preds_tr, multi=self.multi)
+            task_f1_tr_pre = fscore(label_dense_tr, preds_tr, multi=self.multi)
 
             label_dense_ts = tf.cast(tf.argmax(input=label_ts, axis=-1), tf.int32)
             for j in range(num_inner_updates):
                 preds_ts = tf.cast(tf.argmax(input=tf.nn.softmax(task_outputs_ts[j]), axis=-1), tf.int32)
-                task_precision_ts.append(precision(label_dense_ts, preds_ts))
-                task_recall_ts.append(recall(label_dense_ts, preds_ts))
-                task_f1_ts.append(fscore(label_dense_ts, preds_ts))
+                task_precision_ts.append(precision(label_dense_ts, preds_ts, multi=self.multi))
+                task_recall_ts.append(recall(label_dense_ts, preds_ts, multi=self.multi))
+                task_f1_ts.append(fscore(label_dense_ts, preds_ts, multi=self.multi))
 
             task_output = [task_output_tr_pre, task_outputs_ts, task_loss_tr_pre, task_losses_ts, task_precision_tr_pre, task_precision_ts, task_recall_tr_pre, task_recall_ts, task_f1_tr_pre, task_f1_ts]
             #tf.print("Iteration took {}s".format(time.time() - start))
@@ -211,7 +209,7 @@ def outer_eval_step(inp, model, meta_batch_size=25, num_inner_updates=1):
     return outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_precision_tr_pre, total_precision_ts, total_recall_tr_pre, total_recall_ts, total_f1_tr_pre, total_f1_ts
 
 
-def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, meta_train_iterations=15000, meta_batch_size=16, log=True, logdir='/tmp/data', num_inner_updates=1, meta_lr=0.001, log_frequency=5, test_log_frequency=25, multi = 'powerset'):
+def meta_train_fn(model, sampling_mode, exp_string, meta_dataset, writer, support_size=8, meta_train_iterations=15000, meta_batch_size=16, log=True, logdir='/tmp/data', num_inner_updates=1, meta_lr=0.001, log_frequency=5, test_log_frequency=25, multi='powerset'):
 
 
     pre_accuracies, post_accuracies = [], []
@@ -231,7 +229,7 @@ def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, meta_
         # NOTE: The code assumes that the support and query sets have the same
         # number of examples.
 
-        X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='train')
+        X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='train', mode=sampling_mode)
         #X = tf.reshape(X, [meta_batch_size, support_size, -1])
         converter = convert_to_powerset if multi == 'powerset' else convert_to_bin_rel
         inp = support_query_split(X, y, converter, support_dim=1)
@@ -286,7 +284,7 @@ def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, meta_
             same number of examples.
             """
 
-            X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='val')
+            X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='val', mode=sampling_mode)
             #X = tf.reshape(X, [meta_batch_size, support_size, -1])
 
             converter = convert_to_powerset if multi == 'powerset' else convert_to_bin_rel
@@ -324,8 +322,7 @@ def meta_train_fn(model, exp_string, meta_dataset, writer, support_size=8, meta_
 NUM_META_TEST_POINTS = 600
 
 
-def meta_test_fn(model, meta_dataset, writer, support_size=8, meta_batch_size=25, num_inner_updates=1, multi = 'powerset'):
-
+def meta_test_fn(model, meta_dataset, sampling_mode, writer, support_size=8, meta_batch_size=25, num_inner_updates=1, multi='powerset'):
     #num_classes = data_generator.num_classes
 
     np.random.seed(1)
@@ -341,7 +338,7 @@ def meta_test_fn(model, meta_dataset, writer, support_size=8, meta_batch_size=25
         # NOTE: The code assumes that the support and query sets have the same
         # number of examples.
 
-        X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='test')
+        X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='test', mode=sampling_mode)
         #X = tf.reshape(X, [meta_batch_size, support_size, -1])
         converter = convert_to_powerset if multi == 'powerset' else convert_to_bin_rel
         inp = support_query_split(X, y, converter, support_dim=1)
@@ -377,7 +374,7 @@ def meta_test_fn(model, meta_dataset, writer, support_size=8, meta_batch_size=25
     print("Mean meta-test F1:", np.mean(meta_test_f1), "+/-", 1.96 * np.std(meta_test_f1) / np.sqrt(NUM_META_TEST_POINTS))
 
 
-def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, logdir='./checkpoints', data_root="../cs330-storage/", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25, experiment_name=None, model_class="VanillaConvModel", multilabel_scheme = 'powerset'):
+def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, sampling_mode='greedy', logdir='./checkpoints', data_root="../cs330-storage/", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25, experiment_name=None, model_class="VanillaConvModel", multilabel_scheme = 'powerset'):
 
     experiment_fullname = generate_experiment_name(experiment_name, ['train' if meta_train else 'test'])
 
@@ -405,7 +402,7 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
         num_inner_updates) + '.inner_updatelr_' + str(meta_train_inner_update_lr) + '.learn_inner_update_lr_' + str(learn_inner_update_lr)
 
     if meta_train:
-        meta_train_fn(model, exp_string, meta_dataset, writer, support_size, meta_train_iterations, meta_batch_size, log, logdir, num_inner_updates, meta_lr, log_frequency=log_frequency, test_log_frequency=test_log_frequency, multi = multilabel_scheme)
+        meta_train_fn(model, sampling_mode, exp_string, meta_dataset, writer, support_size, meta_train_iterations, meta_batch_size, log, logdir, num_inner_updates, meta_lr, log_frequency=log_frequency, test_log_frequency=test_log_frequency, multi = multilabel_scheme)
     else:
         meta_batch_size = 1
 
@@ -413,16 +410,18 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
         print("Restoring model weights from ", model_file)
         model.load_weights(model_file)
 
-        meta_test_fn(model, meta_dataset, writer, support_size, meta_batch_size, num_inner_updates, multi = multilabel_scheme)
+        meta_test_fn(model, sampling_mode, meta_dataset, writer, support_size, meta_batch_size, num_inner_updates, multi = multilabel_scheme)
 
 
 def main(args):
+    print(args.multilabel_scheme)
     run_maml(support_size=args.support_size, inner_update_lr=args.inner_update_lr,
             num_inner_updates=args.num_inner_updates, meta_train_iterations=args.iterations,
             learn_inner_update_lr=args.learn_inner_lr, meta_train=not args.test,
             label_subset_size=args.label_subset_size, log_frequency=args.log_frequency,
             test_log_frequency=args.test_log_frequency, data_root=args.data_root,
-            experiment_name=args.experiment_name, model_class=args.model_class_name, multilabel_scheme = args.multilabel_scheme)
+            experiment_name=args.experiment_name, model_class=args.model_class_name,
+            sampling_mode=args.sampling_mode, multilabel_scheme = args.multilabel_scheme)
 
 if __name__ == '__main__':
     args = get_args()
