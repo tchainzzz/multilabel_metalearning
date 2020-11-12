@@ -60,6 +60,10 @@ def convert_to_powerset(y):
     one_hot = np.eye(num_classes)[single_labels]
     return one_hot
 
+def convert_to_bin_rel(y):
+    return tf.stack([y,1-y], axis = -1)
+
+
 def support_query_split(X, y, converter, support_dim=1):
     X_tr, X_ts = tf.split(X, 2, axis=support_dim)
     y_new = converter(y)
