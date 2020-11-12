@@ -122,15 +122,15 @@ class MAML(tf.keras.Model):
             #############################
 
             # Compute accuracies from output predictions
-            label_dense_tr = tf.cast(tf.argmax(input=label_tr, axis=1), tf.int32)
-            preds_tr = tf.cast(tf.argmax(input=tf.nn.softmax(task_output_tr_pre), axis=1), tf.int32)
+            label_dense_tr = tf.cast(tf.argmax(input=label_tr, axis=-1), tf.int32)
+            preds_tr = tf.cast(tf.argmax(input=tf.nn.softmax(task_output_tr_pre), axis=-1), tf.int32)
             task_precision_tr_pre = precision(label_dense_tr, preds_tr)
             task_recall_tr_pre = recall(label_dense_tr, preds_tr)
             task_f1_tr_pre = fscore(label_dense_tr, preds_tr)
 
-            label_dense_ts = tf.cast(tf.argmax(input=label_ts, axis=1), tf.int32)
+            label_dense_ts = tf.cast(tf.argmax(input=label_ts, axis=-1), tf.int32)
             for j in range(num_inner_updates):
-                preds_ts = tf.cast(tf.argmax(input=tf.nn.softmax(task_outputs_ts[j]), axis=1), tf.int32)
+                preds_ts = tf.cast(tf.argmax(input=tf.nn.softmax(task_outputs_ts[j]), axis=-1), tf.int32)
                 task_precision_ts.append(precision(label_dense_ts, preds_ts))
                 task_recall_ts.append(recall(label_dense_ts, preds_ts))
                 task_f1_ts.append(fscore(label_dense_ts, preds_ts))
