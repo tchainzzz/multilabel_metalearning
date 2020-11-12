@@ -63,6 +63,8 @@ def ProtoLoss(x_latent, q_latent, labels_onehot, num_classes, num_support, num_q
 
 
 def proto_net_train_step(model, optim, x, q, labels_ph):
+    print(x.shape, q.shape)
+    assert False
     num_support, im_height, im_width, channels = x.shape
     num_queries = q.shape[0]
     #x = tf.reshape(x, [-1, im_height, im_width, channels])
@@ -79,6 +81,7 @@ def proto_net_train_step(model, optim, x, q, labels_ph):
 
 
 def proto_net_eval(model, x, q, labels_ph):
+
     num_support, im_height, im_width, channels = x.shape
     num_queries = q.shape[1]
     #x = tf.reshape(x, [-1, im_height, im_width, channels])
@@ -91,7 +94,7 @@ def proto_net_eval(model, x, q, labels_ph):
     return ce_loss, acc
 
 
-def run_protonet(data_path='./omniglot_resized', n_way=3, k_shot=8, n_query=5):
+def run_protonet(data_dir='../cs330-storage', n_way=3, k_shot=8, n_query=8):
     n_epochs = 20
     n_episodes = 100
 
@@ -148,4 +151,4 @@ def run_protonet(data_path='./omniglot_resized', n_way=3, k_shot=8, n_query=5):
 from options import *
 if __name__ == '__main__':
     args = get_args()
-    results = run_protonet(args.data_dir, n_way=n, k_shot=k, n_query=q, n_meta_test_way=test_n, k_meta_test_shot=test_k, n_meta_test_query=test_q)
+    results = run_protonet(args.data_root, n_way=args.label_subset_size, k_shot=args.support_size, n_query=args.support_size, n_meta_test_way=args.label_subset_size, k_meta_test_shot=args.support_size, n_meta_test_query=args.support_size)
