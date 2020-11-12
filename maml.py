@@ -414,6 +414,7 @@ def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0
 
 
 def main(args):
+    print(args.multilabel_scheme)
     run_maml(support_size=args.support_size, inner_update_lr=args.inner_update_lr,
             num_inner_updates=args.num_inner_updates, meta_train_iterations=args.iterations,
             learn_inner_update_lr=args.learn_inner_lr, meta_train=not args.test,

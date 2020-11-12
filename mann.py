@@ -37,7 +37,7 @@ class SNAILConvBlock(tf.keras.Model):
 
 class MANN(tf.keras.Model):
 
-    def __init__(self, num_classes, support_size, query_size, num_blocks=1, embed_size=64, memory_size=512):
+    def __init__(self, num_classes, support_size, query_size, num_blocks=1, embed_size=64, memory_size=512, multi = 'powerset'):
         super(MANN, self).__init__()
         self.num_classes = num_classes
         self.support_size = support_size
@@ -49,6 +49,7 @@ class MANN(tf.keras.Model):
         #self.conv2 = tf.keras.layers.Conv2D(1, 3, activation='relu', padding="same")
         self.blocks = [SNAILConvBlock() for _ in range(num_blocks)]
         self.dense = tf.keras.layers.Dense(embed_size)
+        self.multi = multi
 
     def call(self, input_images, input_labels):
 
@@ -91,6 +92,7 @@ class MANN(tf.keras.Model):
 def train_step(images, labels, model, optim, eval=False):
     with tf.GradientTape() as tape:
         predictions = model(images, labels)
+        print(predictions)
         loss = model.loss_function(predictions, labels)
     if not eval:
         gradients = tape.gradient(loss, model.trainable_variables)
@@ -98,19 +100,22 @@ def train_step(images, labels, model, optim, eval=False):
     return predictions, loss
 
 
-def main(data_dir='../cs330-storage', num_classes=3, support_size=16, query_size=4, meta_batch_size=8, random_seed=42, iterations=1000, experiment_name=None, lr=1e-3, lr_schedule=False, sampling_mode='greedy'):
+def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_size=4, meta_batch_size=8, random_seed=42, iterations=1000, experiment_name=None, lr=1e-3, lr_schedule=False, sampling_mode='greedy', multi = 'powerset'):
     random.seed(random_seed)
     np.random.seed(random_seed)
     tf.random.set_seed(random_seed)
 
-    meta_dataset = load_data.MetaBigEarthNetTaskDataset(data_dir=data_dir, support_size=support_size + query_size, label_subset_size=num_classes, split_save_path="smallearthnet.pkl", split_file="smallearthnet.pkl", data_format='channels_last')
+    filter_files = [os.path.join(data_root, 'patches_with_cloud_and_shadow.csv'), os.path.join(data_root, 'patches_with_seasonal_snow.csv')]  # replace with your path
+    data_dir = os.path.join(data_root, "SmallEarthNet")
+    meta_dataset = load_data.MetaBigEarthNetTaskDataset(data_dir=data_dir, filter_files=filter_files, support_size=support_size + query_size, label_subset_size=num_classes, split_save_path="smallearthnet.pkl", split_file="smallearthnet.pkl", data_format='channels_last')
 
     experiment_fullname = generate_experiment_name(experiment_name)
     log_dir = '../tensorboard_logs/' + experiment_fullname
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
 
-    o = MANN((1 << num_classes) - 1, support_size, query_size)
+    #adjust for BR
+    o = MANN((1 << num_classes) - 1, support_size, query_size, multi = multi)
 
     lr_config = lr
     if lr_schedule:
@@ -125,20 +130,24 @@ def main(data_dir='../cs330-storage', num_classes=3, support_size=16, query_size
     for step in range(iterations):
         start = time.time()
         X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='train', mode=sampling_mode)
-        y = convert_to_powerset(y)
+        y = convert_to_powerset(y) #adjust for BR
+        #print(y.shape)
         _, ls = train_step(X, y, o, optim)
 
         if (step + 1) % 1 == 0:
             X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='validation', mode=sampling_mode)
-            raw_y = convert_to_powerset(y)
+            raw_y = convert_to_powerset(y) #adjust for BR
             raw_pred, tls = train_step(X, raw_y, o, optim, eval=True)
+            tf.print(raw_pred)
 
             pred_tr = tf.math.argmax(raw_pred[:, :support_size, :], axis=-1)
             y_tr = tf.math.argmax(raw_y[:, :support_size, :], axis=-1)
             pred_ts = tf.math.argmax(raw_pred[:, support_size:, :], axis=-1)
             y_ts = tf.math.argmax(raw_y[:, support_size:, :], axis=-1)
 
+            print("y before reshape: ", pred_tr.shape.as_list())
             pred_tr = tf.reshape(pred_tr, (-1,))
+            print("y after reshape: ",pred_tr.shape.as_list())
             y_tr = tf.reshape(y_tr, (-1,))
             pred_ts = tf.reshape(pred_ts, (-1,))
             y_ts = tf.reshape(y_ts, (-1,))
@@ -171,6 +180,6 @@ def main(data_dir='../cs330-storage', num_classes=3, support_size=16, query_size
 
 if __name__ == '__main__':
     args = get_args()
-    main(data_dir=args.data_root, iterations=args.iterations, support_size=args.support_size, num_classes=args.label_subset_size, experiment_name=args.experiment_name, meta_batch_size=args.bs, sampling_mode=args.sampling_mode)
+    main(data_root=args.data_root, iterations=args.iterations, support_size=args.support_size, num_classes=args.label_subset_size, experiment_name=args.experiment_name, meta_batch_size=args.bs, sampling_mode=args.sampling_mode, multi = args.multilabel_scheme)
 
 
