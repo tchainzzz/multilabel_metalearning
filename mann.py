@@ -7,7 +7,7 @@ import os
 
 import load_data_tf as load_data
 from options import get_args
-from utils import convert_to_powerset, generate_experiment_name, precision, recall, fscore
+from utils import convert_to_powerset, generate_experiment_name, precision, recall, fscore, convert_to_bin_rel
 import time
 from tensorboardX import SummaryWriter
 
@@ -44,12 +44,19 @@ class MANN(tf.keras.Model):
         self.query_size = query_size
         #self.samples_per_class = samples_per_class
         self.layer1 = tf.keras.layers.LSTM(memory_size, return_sequences=True)
-        self.layer2 = tf.keras.layers.LSTM(num_classes, return_sequences=True)
         #self.conv1 = tf.keras.layers.Conv2D(1, 3, activation='relu', padding="same")
         #self.conv2 = tf.keras.layers.Conv2D(1, 3, activation='relu', padding="same")
         self.blocks = [SNAILConvBlock() for _ in range(num_blocks)]
         self.dense = tf.keras.layers.Dense(embed_size)
         self.multi = multi
+
+        if self.multi == 'binary':
+            self.final_layers = []
+            for _ in range(num_classes):
+                self.final_layers.append(tf.keras.layers.LSTM(2, return_sequences=True))
+        else:
+            self.layer2 = tf.keras.layers.LSTM(num_classes, return_sequences=True)
+
 
     def call(self, input_images, input_labels):
 
@@ -67,10 +74,19 @@ class MANN(tf.keras.Model):
 
         lbl_reshaped = tf.concat((input_labels[:, :self.support_size, :], tf.zeros_like(input_labels[:, self.support_size:, :])), axis=1)
         #lbl_reshaped = tf.reshape(lbl_reshaped, (-1, n*k, n)) 
+
+        #SPLIT HERE, CONCAT BINARY LAYER
+
         x = tf.concat((img_reshaped, lbl_reshaped), axis=-1) # (b, s, n + e)
         out = self.layer1(x)
-        out = self.layer2(out)
-        #out = tf.reshape(out, shape)
+
+        if self.multi == 'binary':
+            outputs = [layer(out) for layer in self.final_layers]
+            out = tf.stack(outputs, axis = -2)
+
+        else:
+            out = self.layer2(out)
+            #out = tf.reshape(out, shape)
 
         #############################
         return out
@@ -92,7 +108,6 @@ class MANN(tf.keras.Model):
 def train_step(images, labels, model, optim, eval=False):
     with tf.GradientTape() as tape:
         predictions = model(images, labels)
-        print(predictions)
         loss = model.loss_function(predictions, labels)
     if not eval:
         gradients = tape.gradient(loss, model.trainable_variables)
@@ -114,8 +129,9 @@ def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_si
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
 
-    #adjust for BR
-    o = MANN((1 << num_classes) - 1, support_size, query_size, multi = multi)
+
+    if multi == 'powerset': num_classes = (1 << num_classes) - 1
+    o = MANN(num_classes, support_size, query_size, multi = multi)
 
     lr_config = lr
     if lr_schedule:
@@ -130,37 +146,35 @@ def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_si
     for step in range(iterations):
         start = time.time()
         X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='train', mode=sampling_mode)
-        y = convert_to_powerset(y) #adjust for BR
+        y = convert_to_powerset(y) if multi == 'powerset' else convert_to_bin_rel(y)
         #print(y.shape)
         _, ls = train_step(X, y, o, optim)
 
         if (step + 1) % 1 == 0:
             X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='validation', mode=sampling_mode)
-            raw_y = convert_to_powerset(y) #adjust for BR
+            raw_y = convert_to_powerset(y) if multi == 'powerset' else convert_to_bin_rel(y)
             raw_pred, tls = train_step(X, raw_y, o, optim, eval=True)
-            tf.print(raw_pred)
 
             pred_tr = tf.math.argmax(raw_pred[:, :support_size, :], axis=-1)
             y_tr = tf.math.argmax(raw_y[:, :support_size, :], axis=-1)
             pred_ts = tf.math.argmax(raw_pred[:, support_size:, :], axis=-1)
             y_ts = tf.math.argmax(raw_y[:, support_size:, :], axis=-1)
 
-            print("y before reshape: ", pred_tr.shape.as_list())
-            pred_tr = tf.reshape(pred_tr, (-1,))
-            print("y after reshape: ",pred_tr.shape.as_list())
-            y_tr = tf.reshape(y_tr, (-1,))
-            pred_ts = tf.reshape(pred_ts, (-1,))
-            y_ts = tf.reshape(y_ts, (-1,))
+            shape = (-1,) if multi == 'powerset' else (-1, num_classes)
+            pred_tr = tf.reshape(pred_tr, shape)
+            y_tr = tf.reshape(y_tr, shape)
+            pred_ts = tf.reshape(pred_ts, shape)
+            y_ts = tf.reshape(y_ts, shape)
 
             train_acc = tf.reduce_mean(tf.cast(tf.math.equal(pred_tr, y_tr), tf.float32)).numpy()
             test_acc = tf.reduce_mean(tf.cast(tf.math.equal(pred_ts, y_ts), tf.float32)).numpy()
             test_accuracy.append(test_acc)
-            prec_tr = precision(y_tr, pred_tr)
-            rec_tr = recall(y_tr, pred_tr)
-            f1_tr = fscore(y_tr, pred_tr)
-            prec_ts = precision(y_ts, pred_ts)
-            rec_ts = recall(y_ts, pred_ts)
-            f1_ts = fscore(y_ts, pred_ts)
+            prec_tr = precision(y_tr, pred_tr, multi)
+            rec_tr = recall(y_tr, pred_tr, multi)
+            f1_tr = fscore(y_tr, pred_tr, multi)
+            prec_ts = precision(y_ts, pred_ts, multi)
+            rec_ts = recall(y_ts, pred_ts, multi)
+            f1_ts = fscore(y_ts, pred_ts, multi)
 
             # debug only
             #full_preds = tf.math.argmax(raw_pred, axis=-1)
