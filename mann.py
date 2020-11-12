@@ -11,7 +11,7 @@ from utils import convert_to_powerset, generate_experiment_name, precision, reca
 import time
 from tensorboardX import SummaryWriter
 
-tf.keras.backend.set_floatx('float64')
+#tf.keras.backend.set_floatx('float64')
 np.set_printoptions(precision=4)
 
 class SNAILConvBlock(tf.keras.Model):
@@ -43,7 +43,6 @@ class MANN(tf.keras.Model):
         self.support_size = support_size
         self.query_size = query_size
         #self.samples_per_class = samples_per_class
-        self.layer1 = tf.keras.layers.LSTM(memory_size, return_sequences=True)
         #self.conv1 = tf.keras.layers.Conv2D(1, 3, activation='relu', padding="same")
         #self.conv2 = tf.keras.layers.Conv2D(1, 3, activation='relu', padding="same")
         self.blocks = [SNAILConvBlock() for _ in range(num_blocks)]
@@ -51,15 +50,16 @@ class MANN(tf.keras.Model):
         self.multi = multi
 
         if self.multi == 'binary':
-            self.final_layers = []
+            self.lower_lstm = []
+            self.upper_lstm = []
             for _ in range(num_classes):
-                self.final_layers.append(tf.keras.layers.LSTM(2, return_sequences=True))
+                self.lower_lstm.append(tf.keras.layers.LSTM(memory_size, return_sequences=True))
+                self.upper_lstm.append(tf.keras.layers.LSTM(2, return_sequences=True))
         else:
-            self.layer2 = tf.keras.layers.LSTM(num_classes, return_sequences=True)
-
+            self.lower_lstm = tf.keras.layers.LSTM(memory_size, return_sequences=True)
+            self.upper_lstm = tf.keras.layers.LSTM(num_classes, return_sequences=True)
 
     def call(self, input_images, input_labels):
-
         b, s, h, w, c = input_images.shape
         conv_out = tf.reshape(input_images, (-1, w, h, c))
         for block in self.blocks:
@@ -77,15 +77,20 @@ class MANN(tf.keras.Model):
 
         #SPLIT HERE, CONCAT BINARY LAYER
 
-        x = tf.concat((img_reshaped, lbl_reshaped), axis=-1) # (b, s, n + e)
-        out = self.layer1(x)
 
         if self.multi == 'binary':
-            outputs = [layer(out) for layer in self.final_layers]
-            out = tf.stack(outputs, axis = -2)
-
+            out = tf.repeat(tf.expand_dims(img_reshaped, axis=-2), self.num_classes, axis=-2)
+            out = tf.concat((out, lbl_reshaped), axis=-1)  # (b, s, n, e + 2)
+            class_splits = tf.split(out, self.num_classes, axis=-2)
+            out = [self.lower_lstm[i](tf.squeeze(class_splits[i], axis=-2)) for i in range(self.num_classes)]
+            out = [self.upper_lstm[i](out[i]) for i in range(self.num_classes)]
+            #out = [lower_layer(out) for lower_layer in self.lower_lstm]
+            #out = [upper_layer(out) for upper_layer in self.upper_lstm]
+            out = tf.stack(out, axis=-2)
         else:
-            out = self.layer2(out)
+            x = tf.concat((img_reshaped, lbl_reshaped), axis=-1) # (b, s, n + e)
+            out = self.lower_lstm(x)
+            out = self.upper_lstm(out)
             #out = tf.reshape(out, shape)
 
         #############################
@@ -96,10 +101,15 @@ class MANN(tf.keras.Model):
         #############################
         #### YOUR CODE GOES HERE #### 
         #tf.print(preds[0], labels[0], summarize=-1)
-        y_pred = preds[:, self.support_size:, :]
-        y_true = labels[:, self.support_size:, :]
+        y_pred = preds[:, self.support_size:, ...]
+        y_true = labels[:, self.support_size:, ...]
+        # shape is [b, q, powerset_size] or [b, q, n_classes, 2]
         cce = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
-        loss = cce(y_true, y_pred)
+        if self.multi == 'powerset':
+            loss = cce(y_true, y_pred)
+        else:
+            class_losses = [cce(class_true, class_pred) for class_true, class_pred in zip(tf.split(y_true, self.num_classes, axis=-2), tf.split(y_pred, self.num_classes, axis=-2))]
+            loss = tf.reduce_mean(class_losses)
         return loss
         #############################
 

@@ -95,7 +95,7 @@ def convert_to_powerset(y):
     num_classes = (1 << subset_size) - 1
     single_labels = (np.packbits(y.astype(int), 2, 'little') - 1).reshape((len(y), -1))
     one_hot = np.eye(num_classes)[single_labels]
-    return one_hot
+    return one_hot.astype(np.float32)
 
 def convert_to_bin_rel(y):
     return tf.stack([y,1-y], axis = -1)

@@ -187,7 +187,7 @@ class MetaBigEarthNetTaskDataset():
             batch_labels[i, ...] = temp_support_labels[:, selected_class_mask]
             batch_support[i, ...] = support
             batch_raw_labels[i, ...] = raw_labels
-        return batch_support, batch_labels, batch_raw_labels
+        return batch_support.astype(np.float32), batch_labels.astype(np.float32), batch_raw_labels
 
     def gather_support(self, keys, indices, mode='greedy'):
         key_indices = [i for i, k in enumerate(self.counts.keys()) if k in keys]
