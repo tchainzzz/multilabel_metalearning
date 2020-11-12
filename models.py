@@ -36,12 +36,13 @@ class VGGWrapper(tf.keras.layers.Layer):
 
 
 class VanillaConvModel(tf.keras.layers.Layer):
-    def __init__(self, channels, dim_hidden, dim_output, img_size):
+    def __init__(self, channels, dim_hidden, dim_output, img_size, multi):
         super(VanillaConvModel, self).__init__()
         self.channels = channels
         self.dim_hidden = dim_hidden
         self.dim_output = dim_output
         self.img_size = img_size
+        self.multi = multi
 
         weights = {}
 
@@ -61,8 +62,16 @@ class VanillaConvModel(tf.keras.layers.Layer):
         weights['conv4'] = tf.Variable(weight_initializer([k, k, self.dim_hidden, self.dim_hidden]), name='conv4', dtype=dtype)
         weights['b4'] = tf.Variable(tf.zeros([self.dim_hidden]), name='b4')
         self.bn4 = tf.keras.layers.BatchNormalization(name='bn4')
-        weights['w5'] = tf.Variable(weight_initializer(shape=[self.dim_hidden, self.dim_output]), name='w5', dtype=dtype)
-        weights['b5'] = tf.Variable(tf.zeros([self.dim_output]), name='b5')
+
+        if self.multi == 'binary':
+            for i in range(self.dim_output):
+                weights['brw' + str(i)] = tf.Variable(weight_initializer(shape=[self.dim_hidden, 2]), name='brw' + str(i), dtype=dtype)
+                weights['brb' + str(i)] = tf.Variable(tf.zeros([2]), name='brb' + str(i))
+           
+        else:
+            weights['w5'] = tf.Variable(weight_initializer(shape=[self.dim_hidden, self.dim_output]), name='w5', dtype=dtype)
+            weights['b5'] = tf.Variable(tf.zeros([self.dim_output]), name='b5')
+
         self.model_weights = weights
 
     def call(self, inp, weights):
@@ -74,6 +83,17 @@ class VanillaConvModel(tf.keras.layers.Layer):
         hidden3 = conv_block(hidden2, weights['conv3'], weights['b3'], self.bn3)
         hidden4 = conv_block(hidden3, weights['conv4'], weights['b4'], self.bn4)
         hidden4 = tf.reduce_mean(input_tensor=hidden4, axis=[1, 2])
-        return tf.matmul(hidden4, weights['w5']) + weights['b5']
+        
+
+        if self.multi == 'binary':
+
+            output = tf.expand_dims(tf.matmul(hidden4, weights['brw0']) + weights['brb0'], axis = 1)
+            for i in range(1, self.dim_output):
+                output = tf.concat([output, tf.expand_dims(tf.matmul(hidden4, weights['brw' + str(i)]) + weights['brb' + str(i)], axis = 1)], axis = 1)
+
+            return output
+
+        else:
+            return tf.matmul(hidden4, weights['w5']) + weights['b5']
 
 
