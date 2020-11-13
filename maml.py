@@ -40,9 +40,10 @@ IMG_SIZE = 120
 
 
 class MAML(tf.keras.Model):
-    def __init__(self, dim_input=1, dim_output=1, num_inner_updates=1, inner_update_lr=0.4, num_filters=32, learn_inner_update_lr=False, model='VanillaConvModel', multi = 'powerset'):
+    def __init__(self, dim_input=1, dim_output=1, num_inner_updates=1, inner_update_lr=0.4, num_filters=32, learn_inner_update_lr=False, model='VanillaConvModel', multi = 'powerset', num_classes=3):
         super(MAML, self).__init__()
         self.dim_input = dim_input
+        self.num_classes = num_classes
         self.dim_output = dim_output
         self.inner_update_lr = inner_update_lr
         self.loss_func = partial(cross_entropy_loss)
@@ -122,16 +123,16 @@ class MAML(tf.keras.Model):
             # Compute accuracies from output predictions
             label_dense_tr = tf.cast(tf.argmax(input=label_tr, axis=-1), tf.int32)
             preds_tr = tf.cast(tf.argmax(input=tf.nn.softmax(task_output_tr_pre), axis=-1), tf.int32)
-            task_precision_tr_pre = precision(label_dense_tr, preds_tr, multi=self.multi)
-            task_recall_tr_pre = recall(label_dense_tr, preds_tr, multi=self.multi)
-            task_f1_tr_pre = fscore(label_dense_tr, preds_tr, multi=self.multi)
+            task_precision_tr_pre = precision(label_dense_tr, preds_tr, self.num_classes, multi=self.multi)
+            task_recall_tr_pre = recall(label_dense_tr, preds_tr, self.num_classes, multi=self.multi)
+            task_f1_tr_pre = fscore(label_dense_tr, preds_tr, self.num_classes, multi=self.multi)
 
             label_dense_ts = tf.cast(tf.argmax(input=label_ts, axis=-1), tf.int32)
             for j in range(num_inner_updates):
                 preds_ts = tf.cast(tf.argmax(input=tf.nn.softmax(task_outputs_ts[j]), axis=-1), tf.int32)
-                task_precision_ts.append(precision(label_dense_ts, preds_ts, multi=self.multi))
-                task_recall_ts.append(recall(label_dense_ts, preds_ts, multi=self.multi))
-                task_f1_ts.append(fscore(label_dense_ts, preds_ts, multi=self.multi))
+                task_precision_ts.append(precision(label_dense_ts, preds_ts, self.num_classes, multi=self.multi))
+                task_recall_ts.append(recall(label_dense_ts, preds_ts, self.num_classes, multi=self.multi))
+                task_f1_ts.append(fscore(label_dense_ts, preds_ts, self.num_classes, multi=self.multi))
 
             task_output = [task_output_tr_pre, task_outputs_ts, task_loss_tr_pre, task_losses_ts, task_precision_tr_pre, task_precision_ts, task_recall_tr_pre, task_recall_ts, task_f1_tr_pre, task_f1_ts]
             #tf.print("Iteration took {}s".format(time.time() - start))
