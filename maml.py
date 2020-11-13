@@ -32,7 +32,7 @@ from options import get_args
 from tensorboardX import SummaryWriter
 
 import logging
-
+from pathlib import Path
 
 
 seed = 123
@@ -211,7 +211,6 @@ def outer_eval_step(inp, model, meta_batch_size=25, num_inner_updates=1):
 
 def meta_train_fn(model, sampling_mode, exp_string, meta_dataset, writer, support_size=8, meta_train_iterations=15000, meta_batch_size=16, log=True, logdir='/tmp/data', num_inner_updates=1, meta_lr=0.001, log_frequency=5, test_log_frequency=25, multi='powerset'):
 
-
     pre_accuracies, post_accuracies = [], []
     pre_loss, post_loss = [], []
     pre_precision, post_precision = [], []
@@ -376,7 +375,7 @@ def meta_test_fn(model, meta_dataset, sampling_mode, writer, support_size=8, met
 
 def run_maml(support_size=8, meta_batch_size=4, meta_lr=0.001, inner_update_lr=0.4, num_filters=32, num_inner_updates=1, learn_inner_update_lr=False, resume=False, resume_itr=0, log=True, sampling_mode='greedy', logdir='./checkpoints', data_root="../cs330-storage/", meta_train=True, meta_train_iterations=15000, meta_train_inner_update_lr=-1, label_subset_size=3, log_frequency=5, test_log_frequency=25, experiment_name=None, model_class="VanillaConvModel", multilabel_scheme = 'powerset'):
 
-    experiment_fullname = generate_experiment_name(experiment_name, ['train' if meta_train else 'test'])
+    experiment_fullname = generate_experiment_name(experiment_name, ['train' if meta_train else 'test', Path(__file__).stem])
 
     log_dir = '../tensorboard_logs/' + experiment_fullname
     os.makedirs(log_dir, exist_ok=True)
