@@ -10,6 +10,7 @@ from options import get_args
 from utils import convert_to_powerset, generate_experiment_name, precision, recall, fscore, convert_to_bin_rel
 import time
 from tensorboardX import SummaryWriter
+from pathlib import Path
 
 #tf.keras.backend.set_floatx('float64')
 np.set_printoptions(precision=4)
@@ -134,7 +135,7 @@ def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_si
     data_dir = os.path.join(data_root, "SmallEarthNet")
     meta_dataset = load_data.MetaBigEarthNetTaskDataset(data_dir=data_dir, filter_files=filter_files, support_size=support_size + query_size, label_subset_size=num_classes, split_save_path="smallearthnet.pkl", split_file="smallearthnet.pkl", data_format='channels_last')
 
-    experiment_fullname = generate_experiment_name(experiment_name)
+    experiment_fullname = generate_experiment_name(experiment_name, extra_tokens=[Path(__file__).stem])
     log_dir = '../tensorboard_logs/' + experiment_fullname
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
