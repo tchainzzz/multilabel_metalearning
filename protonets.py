@@ -117,8 +117,7 @@ def proto_net_eval(model, x, q, labels_ph, label_subset_size):
     return ce_loss, prec, rec, f1
 
 
-def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, n_meta_test_way=3, n_meta_test_support=8, n_meta_test_query=8, multi='powerset', experiment_name=None):
-    n_epochs = 20
+def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, n_meta_test_way=3, n_meta_test_support=8, n_meta_test_query=8, multi='powerset', experiment_name=None, n_epochs=20):
     n_episodes = 100
 
     num_filters = 32
@@ -139,7 +138,7 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
 
     filter_files = [os.path.join(data_root, 'patches_with_cloud_and_shadow.csv'), os.path.join(data_root, 'patches_with_seasonal_snow.csv')]  # replace with your path
     data_dir = os.path.join(data_root, "SmallEarthNet")
-    meta_dataset = load_data.MetaBigEarthNetTaskDataset(data_dir=data_dir, support_size=n_support+n_query, label_subset_size=n_way, split_save_path="smallearthnet.pkl", split_file="smallearthnet.pkl", data_format='channels_last')
+    meta_dataset = load_data.MetaBigEarthNetTaskDataset(data_dir=data_dir, support_size=n_support+n_query, label_subset_size=n_way, filter_files=filter_files, split_save_path="smallearthnet.pkl", split_file="smallearthnet.pkl", data_format='channels_last')
 
     for ep in range(n_epochs):
         ls, prec, rec, f1 = [], [], [], []
@@ -167,7 +166,7 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
         writer.add_scalar('Meta-train F1', mean_f1, ep)
         X, y, y_debug = meta_dataset.sample_batch(batch_size=1, split='val', mode='permutation')
         X = tf.squeeze(X, axis=0)
-        support, query = X[:n_support, ...], X[:n_support, ...]
+        support, query = X[:n_support, ...], X[n_support:, ...]
         labels = tf.squeeze(y[:, n_support:, ...], 0)
         val_ls, val_prec, val_rec, val_f1 = proto_net_eval(model, x=support, q=query, labels_ph=labels, label_subset_size=n_way)
         writer.add_scalar('Meta-validation loss', val_ls.numpy(), ep)
@@ -185,9 +184,9 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
     for epi in range(n_meta_test_episodes):
         X, y, y_debug = meta_dataset.sample_batch(batch_size=1, split='test', mode='permutation')
         X = tf.squeeze(X, axis=0)
-        support, query = X[:n_support, ...], X[n_support, ...]
-        labels = tf.squeeze(y[:, :, n_meta_test_support:, :], 0)
-        ls_ts, prec_ts, rec_ts, f1_ts = proto_net_eval(model, x=support, q=query, labels_ph=labels)
+        support, query = X[:n_support, ...], X[n_support:, ...]
+        labels = tf.squeeze(y[:, n_meta_test_support:, :], 0)
+        ls_ts, prec_ts, rec_ts, f1_ts = proto_net_eval(model, x=support, q=query, labels_ph=labels, label_subset_size=n_meta_test_way)
         meta_test_loss.append(ls_ts)
         meta_test_prec.append(prec_ts)
         meta_test_rec.append(rec_ts)
@@ -200,4 +199,4 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
 from options import *
 if __name__ == '__main__':
     args = get_args()
-    results = run_protonet(args.data_root, n_way=args.label_subset_size, n_support=args.support_size, n_query=args.support_size, n_meta_test_way=args.label_subset_size, n_meta_test_support=args.support_size, n_meta_test_query=args.support_size, multi=args.multilabel_scheme, experiment_name=args.experiment_name)
+    results = run_protonet(args.data_root, n_way=args.label_subset_size, n_support=args.support_size, n_query=args.support_size, n_meta_test_way=args.label_subset_size, n_meta_test_support=args.support_size, n_meta_test_query=args.support_size, multi=args.multilabel_scheme, experiment_name=args.experiment_name, n_epochs=args.iterations)
