@@ -17,15 +17,24 @@ def accuracy(labels, predictions):
     return tf.reduce_mean(tf.cast(tf.equal(labels, predictions), dtype=tf.float32))
 
 @tf.function
-def precision(labels, predictions, multi='powerset'):
+def lazy_onehot(labels, predictions, n_classes):
+    n_classes = tf.cast(n_classes, labels.dtype)
+    labels = tf.math.floormod(tf.bitwise.right_shift(tf.expand_dims(labels, 1), tf.range(n_classes)), 2)
+    predictions = tf.math.floormod(tf.bitwise.right_shift(tf.expand_dims(predictions, 1), tf.range(n_classes)), 2)
+    return labels, predictions
+
+@tf.function
+def precision(labels, predictions, n_classes, multi='powerset'):
     class_prec = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
-    if multi == 'powerset':
+    if multi == 'old_powerset':
         unique_preds, indices = tf.unique(predictions)
         for i in range(len(unique_preds)):
             pred = unique_preds[i]
             prec = tf.reduce_mean(tf.cast(tf.equal(labels[predictions == pred], predictions[predictions==pred]), dtype=tf.float32))
             class_prec = class_prec.write(i, prec)
-    elif multi == 'binary':
+    elif multi == 'binary' or multi == 'powerset':
+        if multi == 'powerset':
+            labels, predictions = lazy_onehot(labels, predictions, n_classes)
         _, n_classes = labels.shape
         for i in range(n_classes):
             class_labels = labels[:, i]
@@ -38,15 +47,18 @@ def precision(labels, predictions, multi='powerset'):
     return tf.reduce_mean(class_prec.stack())
 
 @tf.function
-def recall(labels, predictions, multi='powerset'):
+def recall(labels, predictions, n_classes, multi='powerset'):
     class_rec = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
-    if multi == 'powerset':
+    if multi == 'old_powerset':
         unique_labels, indices = tf.unique(labels)
         for i in range(len(unique_labels)):
             lbl = unique_labels[i]
             rec = tf.reduce_mean(tf.cast(tf.equal(labels[labels == lbl], predictions[labels == lbl]), dtype=tf.float32))
             class_rec = class_rec.write(i, rec)
-    elif multi == 'binary':
+    elif multi == 'binary' or multi == 'powerset':
+        if multi == 'powerset':
+            labels, predictions = lazy_onehot(labels, predictions, n_classes)
+
         _, n_classes = labels.shape
         for i in range(n_classes):
             class_labels = labels[:, i]
@@ -60,10 +72,9 @@ def recall(labels, predictions, multi='powerset'):
     return tf.reduce_mean(class_rec.stack())
 
 @tf.function
-def fscore(labels, predictions, multi='powerset', beta=1):
-
+def fscore(labels, predictions, n_classes, multi='powerset', beta=1):
     class_f = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
-    if multi == 'powerset':
+    if multi == 'old_powerset':
         unique_preds, _ = tf.unique(predictions)
         unique_labels, _ = tf.unique(labels)
         unique_tokens, _ = tf.unique(tf.concat([unique_preds, unique_labels], axis=0))
@@ -75,7 +86,9 @@ def fscore(labels, predictions, multi='powerset', beta=1):
             rec = tf.cond(tf.equal(tf.size(label_mask), 0), lambda: tf.constant(0.0), lambda: tf.reduce_mean(label_mask))
             fscore = tf.cond(tf.logical_and(tf.equal(prec, 0), tf.equal(rec, 0)), lambda: tf.constant(0.0), lambda: (1 + beta ** 2) * prec * rec / (beta ** 2 * prec + rec))
             class_f = class_f.write(i, fscore)
-    elif multi == 'binary':
+    elif multi == 'binary' or multi == 'powerset':
+        if multi == 'powerset':
+            labels, predictions = lazy_onehot(labels, predictions, n_classes)
         _, n_classes = labels.shape
         for i in range(n_classes):
             class_labels = labels[:, i]

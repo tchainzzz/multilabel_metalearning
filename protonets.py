@@ -40,7 +40,7 @@ class ProtoNet(tf.keras.Model):
         return out
 
 
-    def ProtoLoss(self, x_latent, q_latent, labels_onehot, num_classes, num_support, num_queries):
+    def ProtoLoss(self, x_latent, q_latent, labels_onehot, num_classes, num_support, num_queries, label_subset_size):
         # return the cross-entropy loss and accuracy
         tf.random.shuffle(q_latent)
         labels_categorical = tf.argmax(labels_onehot, axis=-1)
@@ -80,13 +80,13 @@ class ProtoNet(tf.keras.Model):
         ce_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(tf.stop_gradient(labels_onehot), -diffs))
         preds = tf.argmax(-diffs, axis=-1)
         labels = tf.argmax(labels_onehot, axis=-1)
-        prec = precision(preds, labels, self.multi)
-        rec = recall(preds, labels, self.multi)
-        f1 = fscore(preds, labels, self.multi)
+        prec = precision(preds, labels, label_subset_size, self.multi)
+        rec = recall(preds, labels, label_subset_size, self.multi)
+        f1 = fscore(preds, labels, label_subset_size, self.multi)
         return ce_loss, prec, rec, f1
 
 
-def proto_net_train_step(model, optim, x, q, labels_ph):
+def proto_net_train_step(model, optim, x, q, labels_ph, label_subset_size):
     num_support, im_height, im_width, channels = x.shape
     num_queries = q.shape[0]
     num_classes = labels_ph.shape[1]
@@ -96,13 +96,13 @@ def proto_net_train_step(model, optim, x, q, labels_ph):
     with tf.GradientTape() as tape:
         x_latent = model(x)
         q_latent = model(q)
-        ce_loss, prec, rec, f1 = model.ProtoLoss(x_latent, q_latent, labels_ph, num_classes, num_support, num_queries)
+        ce_loss, prec, rec, f1 = model.ProtoLoss(x_latent, q_latent, labels_ph, num_classes, num_support, num_queries, label_subset_size)
     gradients = tape.gradient(ce_loss, model.trainable_variables)
     optim.apply_gradients(zip(gradients, model.trainable_variables))
     return ce_loss, prec, rec, f1
 
 
-def proto_net_eval(model, x, q, labels_ph):
+def proto_net_eval(model, x, q, labels_ph, label_subset_size):
 
     num_support, im_height, im_width, channels = x.shape
     num_queries = q.shape[0]
@@ -112,7 +112,7 @@ def proto_net_eval(model, x, q, labels_ph):
 
     x_latent = model(x)
     q_latent = model(q)
-    ce_loss, prec, rec, f1 = model.ProtoLoss(x_latent, q_latent, labels_ph, num_classes, num_support, num_queries)
+    ce_loss, prec, rec, f1 = model.ProtoLoss(x_latent, q_latent, labels_ph, num_classes, num_support, num_queries, label_subset_size)
 
     return ce_loss, prec, rec, f1
 
@@ -152,7 +152,7 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
             X = tf.squeeze(X, axis=0)
             support, query = X[:n_support, ...], X[n_support:, ...]
             labels = tf.squeeze(y[:, n_support:, ...], 0)
-            ls_tr, prec_tr, rec_tr, f1_tr = proto_net_train_step(model, optimizer, x=support, q=query, labels_ph=labels)
+            ls_tr, prec_tr, rec_tr, f1_tr = proto_net_train_step(model, optimizer, x=support, q=query, labels_ph=labels, label_subset_size=n_way)
             ls.append(ls_tr.numpy())
             prec.append(prec_tr.numpy())
             rec.append(rec_tr.numpy())
@@ -169,7 +169,7 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
         X = tf.squeeze(X, axis=0)
         support, query = X[:n_support, ...], X[:n_support, ...]
         labels = tf.squeeze(y[:, n_support:, ...], 0)
-        val_ls, val_prec, val_rec, val_f1 = proto_net_eval(model, x=support, q=query, labels_ph=labels)
+        val_ls, val_prec, val_rec, val_f1 = proto_net_eval(model, x=support, q=query, labels_ph=labels, label_subset_size=n_way)
         writer.add_scalar('Meta-validation loss', val_ls.numpy(), ep)
         writer.add_scalar('Meta-validation precision', val_prec.numpy(), ep)
         writer.add_scalar('Meta-validation recall', val_rec.numpy(), ep)

@@ -141,8 +141,7 @@ def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_si
     writer = SummaryWriter(log_dir=log_dir)
 
 
-    if multi == 'powerset': num_classes = (1 << num_classes) - 1
-    o = MANN(num_classes, support_size, query_size, multi = multi)
+    o = MANN((1 << num_classes) - 1 if multi == 'powerset' else num_classes, support_size, query_size, multi = multi)
 
     lr_config = lr
     if lr_schedule:
@@ -180,12 +179,12 @@ def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_si
             train_acc = tf.reduce_mean(tf.cast(tf.math.equal(pred_tr, y_tr), tf.float32)).numpy()
             test_acc = tf.reduce_mean(tf.cast(tf.math.equal(pred_ts, y_ts), tf.float32)).numpy()
             test_accuracy.append(test_acc)
-            prec_tr = precision(y_tr, pred_tr, multi)
-            rec_tr = recall(y_tr, pred_tr, multi)
-            f1_tr = fscore(y_tr, pred_tr, multi)
-            prec_ts = precision(y_ts, pred_ts, multi)
-            rec_ts = recall(y_ts, pred_ts, multi)
-            f1_ts = fscore(y_ts, pred_ts, multi)
+            prec_tr = precision(y_tr, pred_tr, num_classes, multi)
+            rec_tr = recall(y_tr, pred_tr, num_classes, multi)
+            f1_tr = fscore(y_tr, pred_tr, num_classes, multi)
+            prec_ts = precision(y_ts, pred_ts, num_classes, multi)
+            rec_ts = recall(y_ts, pred_ts, num_classes, multi)
+            f1_ts = fscore(y_ts, pred_ts, num_classes, multi)
 
             # debug only
             #full_preds = tf.math.argmax(raw_pred, axis=-1)
