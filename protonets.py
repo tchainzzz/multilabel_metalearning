@@ -11,24 +11,28 @@ from pathlib import Path
 from utils import *
 from tensorboardX import SummaryWriter
 
+from mann import SNAILConvBlock
+
 class ProtoNet(tf.keras.Model):
 
-    def __init__(self, num_filters, latent_dim, num_classes, multi='powerset'):
+    def __init__(self, num_filters, latent_dim, num_classes, num_blocks=4, multi='powerset'):
         super(ProtoNet, self).__init__()
         self.num_filters = num_filters
         self.num_classes = num_classes
         self.multi = multi
         self.latent_dim = latent_dim
-        num_filter_list = self.num_filters + [latent_dim]
-        self.convs = []
-        for i, num_filter in enumerate(num_filter_list):
+        #num_filter_list = self.num_filters + [latent_dim]
+        #self.convs = []
+        """for i, num_filter in enumerate(num_filter_list):
             block_parts = [layers.Conv2D(filters=num_filter, kernel_size=3, padding='SAME', activation='linear'), ]
             block_parts += [layers.BatchNormalization()]
             block_parts += [layers.Activation('relu')]
             block_parts += [layers.MaxPool2D()]
             block = tf.keras.Sequential(block_parts, name='conv_block_%d' % i)
             self.__setattr__("conv%d" % i, block)
-            self.convs.append(block)
+            self.convs.append(block)"""
+
+        self.convs = [SNAILConvBlock() for _ in range(num_blocks)]
         self.flatten = tf.keras.layers.Flatten()
         if multi == 'powerset':
             self.embed = tf.keras.layers.Dense(latent_dim)
@@ -70,7 +74,8 @@ class ProtoNet(tf.keras.Model):
                 centroid = self.safe_masked_centroid(support_class, embed_size) 
             else:
                 bin_rel_pos_mask = (labels_onehot[:, i, 1] == 1)
-                support_class, not_support_class = x_latent[:, i, :][bin_rel_pos_mask], x_latent[:, i, :][~bin_rel_pos_mask]
+                bin_rel_neg_mask = (labels_onehot[:, i, 0] == 1)
+                support_class, not_support_class = x_latent[:, i, :][bin_rel_pos_mask], x_latent[:, i, :][bin_rel_neg_mask]
                 pos_centroid, neg_centroid = self.safe_masked_centroid(support_class, embed_size), self.safe_masked_centroid(not_support_class, embed_size)
                 centroid = tf.stack([pos_centroid, neg_centroid], axis=0)
             centroids.append(centroid)
@@ -142,11 +147,10 @@ def proto_net_eval(model, x, q, labels_ph, label_subset_size):
     return ce_loss, prec, rec, f1
 
 
-def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, n_meta_test_way=3, n_meta_test_support=8, n_meta_test_query=8, multi='powerset', experiment_name=None, n_epochs=20):
+def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, n_meta_test_way=3, n_meta_test_support=8, n_meta_test_query=8, multi='powerset', experiment_name=None, n_epochs=20, latent_dim=16, lr=1e-3):
     n_episodes = 100
 
     num_filters = 32
-    latent_dim = 16
     num_conv_layers = 3
     n_meta_test_episodes = 1000
     experiment_fullname = generate_experiment_name(experiment_name, extra_tokens=[Path(__file__).stem])
@@ -156,7 +160,7 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
     writer = SummaryWriter(log_dir=log_dir)
 
     model = ProtoNet([num_filters] * num_conv_layers, latent_dim, n_way, multi=multi)
-    optimizer = tf.keras.optimizers.Adam()
+    optimizer = tf.keras.optimizers.SGD(lr=lr)
 
     train_losses, train_accs = [], []
     val_losses, val_accs = [], []
@@ -228,4 +232,4 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
 from options import *
 if __name__ == '__main__':
     args = get_args()
-    results = run_protonet(args.data_root, n_way=args.label_subset_size, n_support=args.support_size, n_query=args.support_size, n_meta_test_way=args.label_subset_size, n_meta_test_support=args.support_size, n_meta_test_query=args.support_size, multi=args.multilabel_scheme, experiment_name=args.experiment_name, n_epochs=args.iterations)
+    results = run_protonet(args.data_root, n_way=args.label_subset_size, n_support=args.support_size, n_query=args.support_size, n_meta_test_way=args.label_subset_size, n_meta_test_support=args.support_size, n_meta_test_query=args.support_size, multi=args.multilabel_scheme, experiment_name=args.experiment_name, n_epochs=args.iterations, latent_dim=args.embed_dim, lr=args.lr)

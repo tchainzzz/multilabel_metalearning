@@ -6,6 +6,7 @@ def get_args():
     psr.add_argument("--inner-update-lr", type=float, default=0.4, help="Inner optimization learning rate initialization. Constant if --learn-inner-lr not specified.")
     psr.add_argument("--num_inner_updates", type=int, default=1, help="Number of inner optimization steps (MAML).")
     psr.add_argument("--iterations", type=int, default=4000, help="Number of outer optimization iterations (MAML).")
+    psr.add_argument("--lr", type=float, default=1e-3, help="Learning rate (outer, if applicable)")
     psr.add_argument("--learn-inner-lr", action='store_true', help="Whether to dynamically update the inner MAML learning rate.")
     psr.add_argument("--bs", "--batch-size", type=int, default=8, help="Meta-batch size (# of size-N disjoint label subsets.")
     psr.add_argument("--label-subset-size", type=int, default=3, help="Maximum cardinality of multi-labels in each meta-example (task).")
@@ -18,4 +19,5 @@ def get_args():
     psr.add_argument("--test", action='store_true')
     psr.add_argument("--model-class-name", type=str, default="VanillaConvModel", help="Model class name (in models.py)")
     psr.add_argument("--sampling-mode", type=str, choices=['permutation', 'greedy'], default='greedy', help="Multi-label task sampling framework")
+    psr.add_argument("--embed-dim", type=int, default=16, help="Embedding dimension for protonets")
     return psr.parse_args()
