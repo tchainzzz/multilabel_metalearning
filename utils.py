@@ -111,7 +111,7 @@ def convert_to_powerset(y):
     return one_hot.astype(np.float32)
 
 def convert_to_bin_rel(y):
-    return tf.stack([y,1-y], axis = -1)
+    return tf.stack([1-y, y], axis = -1)
 
 
 def support_query_split(X, y, converter, support_dim=1):

@@ -13,9 +13,10 @@ from tensorboardX import SummaryWriter
 
 class ProtoNet(tf.keras.Model):
 
-    def __init__(self, num_filters, latent_dim, multi='powerset'):
+    def __init__(self, num_filters, latent_dim, num_classes, multi='powerset'):
         super(ProtoNet, self).__init__()
         self.num_filters = num_filters
+        self.num_classes = num_classes
         self.multi = multi
         self.latent_dim = latent_dim
         num_filter_list = self.num_filters + [latent_dim]
@@ -29,16 +30,24 @@ class ProtoNet(tf.keras.Model):
             self.__setattr__("conv%d" % i, block)
             self.convs.append(block)
         self.flatten = tf.keras.layers.Flatten()
-        self.embed = tf.keras.layers.Dense(latent_dim)
+        if multi == 'powerset':
+            self.embed = tf.keras.layers.Dense(latent_dim)
+        else:
+            self.embed = [tf.keras.layers.Dense(latent_dim) for _ in range(num_classes)]
 
     def call(self, inp):
         out = inp
         for conv in self.convs:
             out = conv(out)
         out = self.flatten(out)
-        out = self.embed(out)
+        if self.multi == 'powerset':
+            out = self.embed(out)
+        else:
+            out = tf.stack([layer(out) for layer in self.embed], axis=1)
         return out
 
+    def safe_masked_centroid(self, support, embed_size, placeholder=0.):
+        return tf.cond(tf.equal(tf.size(support), 0), lambda: tf.constant([placeholder] * embed_size), lambda: tf.reduce_mean(support, axis=0))
 
     def ProtoLoss(self, x_latent, q_latent, labels_onehot, num_classes, num_support, num_queries, label_subset_size):
         # return the cross-entropy loss and accuracy
@@ -48,16 +57,22 @@ class ProtoNet(tf.keras.Model):
         centroids = []
         embed_size = x_latent.shape[-1] 
         for i in range(num_classes):
-            support_class = x_latent[labels_categorical == i]
-
-            """
-            centroid is:
-                computed as normal if class support is non-zero (i.e. more than 1 example
-                from class)
-                set to some arbitrary constant if class support is zero (avg. of zero-length 
-                slice is undefined), then masked out
-            """
-            centroid = tf.cond(tf.equal(tf.size(support_class), 0), lambda: tf.constant([0.] * embed_size), lambda: tf.reduce_mean(support_class, axis=0))
+            # select all examples (i.e. "rows" of x_latent) relevant to centroid
+            if self.multi == 'powerset':
+                support_class = x_latent[labels_categorical == i]
+                """
+                centroid is:
+                    computed as normal if class support is non-zero (i.e. more than 1 example
+                    from class)
+                    set to some arbitrary constant if class support is zero (avg. of zero-length
+                    slice is undefined), then masked out
+                """
+                centroid = self.safe_masked_centroid(support_class, embed_size) 
+            else:
+                bin_rel_pos_mask = (labels_onehot[:, i, 1] == 1)
+                support_class, not_support_class = x_latent[:, i, :][bin_rel_pos_mask], x_latent[:, i, :][~bin_rel_pos_mask]
+                pos_centroid, neg_centroid = self.safe_masked_centroid(support_class, embed_size), self.safe_masked_centroid(not_support_class, embed_size)
+                centroid = tf.stack([pos_centroid, neg_centroid], axis=0)
             centroids.append(centroid)
         centroids = tf.stack(centroids, axis=0)
         # reduce along "classes" dim to get per-class means. output [N, D]
@@ -66,16 +81,26 @@ class ProtoNet(tf.keras.Model):
         centroids_repeat = tf.repeat(tf.expand_dims(centroids, 0), repeats=num_queries, axis=0) # from (n_classes, embed_dim) -> (n_query, n_classes, embed_dim)
 
         # compute the prototypes
-        q_latent = tf.repeat(tf.expand_dims(q_latent, 1), repeats=num_classes, axis=1) # parallel expansion from (n_query, embed_dim) -> (n_query, n_classes, embed_dim)
+        if self.multi == 'powerset':
+            q_latent = tf.repeat(tf.expand_dims(q_latent, 1), repeats=num_classes, axis=1) # parallel expansion from (n_query, embed_dim) -> (n_query, n_classes, embed_dim)
+        else:
+            q_latent = tf.repeat(tf.expand_dims(q_latent, 2), repeats=2, axis=2)
+
+        """
+            else if multi == binary, we already have per-class OVR embeddings, 
+        """
 
         diffs = tf.reduce_sum(tf.square(tf.subtract(q_latent, centroids_repeat)), axis=-1) 
-        # shape should be (n_query, n_classes)
+        # shape should be (n_query, n_classes) and 2 if binary relevance
 
         #diffs = tf.clip_by_value(diffs, tf.reduce_min(diffs), tf.reduce_max(diffs))
         n_query = q_latent.shape[0]
 
-        mask = tf.repeat(tf.clip_by_value(tf.reduce_sum(labels_onehot, axis=0, keepdims=True), 0, 1), repeats=n_query, axis=0) # columns of 0s (class does not appear in query) and 1s (class does appear in query)
+        pre_mask_onehot = labels_onehot if self.multi == 'powerset' else labels_onehot[..., 1]
+        mask = tf.repeat(tf.clip_by_value(tf.reduce_sum(pre_mask_onehot, axis=0, keepdims=True), 0, 1), repeats=n_query, axis=0) # columns of 0s (class does not appear in query) and 1s (class does appear in query)
+
         replace = tf.ones_like(diffs) * tf.reduce_max(diffs) # masked out w/ max (i.e. replace non well-defined centroids w/ min. energy logit output
+        if self.multi == 'binary': mask = tf.repeat(tf.expand_dims(mask, 2), repeats=2, axis=2)
         diffs = diffs * mask + replace * (1 - mask) # 0-1 mask -- can't assign to eager tensor
         ce_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(tf.stop_gradient(labels_onehot), -diffs))
         preds = tf.argmax(-diffs, axis=-1)
@@ -130,7 +155,7 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
 
-    model = ProtoNet([num_filters] * num_conv_layers, latent_dim, multi=multi)
+    model = ProtoNet([num_filters] * num_conv_layers, latent_dim, n_way, multi=multi)
     optimizer = tf.keras.optimizers.Adam()
 
     train_losses, train_accs = [], []
@@ -144,7 +169,7 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
         ls, prec, rec, f1 = [], [], [], []
         for epi in range(n_episodes):
             X, y, y_debug = meta_dataset.sample_batch(batch_size=1, split='train', mode='permutation')
-            y = convert_to_powerset(y)
+            y = convert_to_powerset(y) if multi == 'powerset' else convert_to_bin_rel(y)
             # Powerset shapes: (1, support + query, h, w, c); (1, support + query, 2^n_classes - 1)
             # BR shapes: " , (1, support + query, n_classes, 2)
             _, s, h, w, c = X.shape
@@ -165,6 +190,8 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
         writer.add_scalar('Meta-train recall', mean_rec, ep)
         writer.add_scalar('Meta-train F1', mean_f1, ep)
         X, y, y_debug = meta_dataset.sample_batch(batch_size=1, split='val', mode='permutation')
+        y = convert_to_powerset(y) if multi == 'powerset' else convert_to_bin_rel(y)
+
         X = tf.squeeze(X, axis=0)
         support, query = X[:n_support, ...], X[n_support:, ...]
         labels = tf.squeeze(y[:, n_support:, ...], 0)
@@ -184,6 +211,8 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
     for epi in range(n_meta_test_episodes):
         X, y, y_debug = meta_dataset.sample_batch(batch_size=1, split='test', mode='permutation')
         X = tf.squeeze(X, axis=0)
+        y = convert_to_powerset(y) if multi == 'powerset' else convert_to_bin_rel(y)
+
         support, query = X[:n_support, ...], X[n_support:, ...]
         labels = tf.squeeze(y[:, n_meta_test_support:, :], 0)
         ls_ts, prec_ts, rec_ts, f1_ts = proto_net_eval(model, x=support, q=query, labels_ph=labels, label_subset_size=n_meta_test_way)
