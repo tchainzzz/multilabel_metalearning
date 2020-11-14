@@ -38,7 +38,7 @@ class SNAILConvBlock(tf.keras.Model):
 
 class MANN(tf.keras.Model):
 
-    def __init__(self, num_classes, support_size, query_size, num_blocks=1, embed_size=64, memory_size=512, multi = 'powerset'):
+    def __init__(self, num_classes, support_size, query_size, num_blocks=4, embed_size=64, memory_size=512, multi = 'powerset'):
         super(MANN, self).__init__()
         self.num_classes = num_classes
         self.support_size = support_size
