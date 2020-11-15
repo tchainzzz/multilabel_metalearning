@@ -126,7 +126,7 @@ def train_step(images, labels, model, optim, eval=False):
     return predictions, loss
 
 
-def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_size=4, meta_batch_size=8, random_seed=42, iterations=1000, experiment_name=None, lr=1e-3, lr_schedule=False, sampling_mode='greedy', multi = 'powerset'):
+def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_size=4, meta_batch_size=8, random_seed=42, iterations=1000, experiment_name=None, lr=1e-3, lr_schedule=False, sampling_mode='greedy', multi = 'powerset', log_frequency=50):
     random.seed(random_seed)
     np.random.seed(random_seed)
     tf.random.set_seed(random_seed)
@@ -160,50 +160,51 @@ def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_si
         #print(y.shape)
         _, ls = train_step(X, y, o, optim)
 
-        if (step + 1) % 1 == 0:
-            X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='validation', mode=sampling_mode)
-            raw_y = convert_to_powerset(y) if multi == 'powerset' else convert_to_bin_rel(y)
-            raw_pred, tls = train_step(X, raw_y, o, optim, eval=True)
+        X, y, y_debug = meta_dataset.sample_batch(batch_size=meta_batch_size, split='validation', mode=sampling_mode)
+        raw_y = convert_to_powerset(y) if multi == 'powerset' else convert_to_bin_rel(y)
+        raw_pred, tls = train_step(X, raw_y, o, optim, eval=True)
 
-            pred_tr = tf.math.argmax(raw_pred[:, :support_size, :], axis=-1)
-            y_tr = tf.math.argmax(raw_y[:, :support_size, :], axis=-1)
-            pred_ts = tf.math.argmax(raw_pred[:, support_size:, :], axis=-1)
-            y_ts = tf.math.argmax(raw_y[:, support_size:, :], axis=-1)
+        pred_tr = tf.math.argmax(raw_pred[:, :support_size, :], axis=-1)
+        y_tr = tf.math.argmax(raw_y[:, :support_size, :], axis=-1)
+        pred_ts = tf.math.argmax(raw_pred[:, support_size:, :], axis=-1)
+        y_ts = tf.math.argmax(raw_y[:, support_size:, :], axis=-1)
 
-            shape = (-1,) if multi == 'powerset' else (-1, num_classes)
-            pred_tr = tf.reshape(pred_tr, shape)
-            y_tr = tf.reshape(y_tr, shape)
-            pred_ts = tf.reshape(pred_ts, shape)
-            y_ts = tf.reshape(y_ts, shape)
+        shape = (-1,) if multi == 'powerset' else (-1, num_classes)
+        pred_tr = tf.reshape(pred_tr, shape)
+        y_tr = tf.reshape(y_tr, shape)
+        pred_ts = tf.reshape(pred_ts, shape)
+        y_ts = tf.reshape(y_ts, shape)
 
-            train_acc = tf.reduce_mean(tf.cast(tf.math.equal(pred_tr, y_tr), tf.float32)).numpy()
-            test_acc = tf.reduce_mean(tf.cast(tf.math.equal(pred_ts, y_ts), tf.float32)).numpy()
-            test_accuracy.append(test_acc)
-            prec_tr = precision(y_tr, pred_tr, num_classes, multi)
-            rec_tr = recall(y_tr, pred_tr, num_classes, multi)
-            f1_tr = fscore(y_tr, pred_tr, num_classes, multi)
-            prec_ts = precision(y_ts, pred_ts, num_classes, multi)
-            rec_ts = recall(y_ts, pred_ts, num_classes, multi)
-            f1_ts = fscore(y_ts, pred_ts, num_classes, multi)
+        train_acc = tf.reduce_mean(tf.cast(tf.math.equal(pred_tr, y_tr), tf.float32)).numpy()
+        test_acc = tf.reduce_mean(tf.cast(tf.math.equal(pred_ts, y_ts), tf.float32)).numpy()
+        test_accuracy.append(test_acc)
+        prec_tr = precision(y_tr, pred_tr, num_classes, multi)
+        rec_tr = recall(y_tr, pred_tr, num_classes, multi)
+        f1_tr = fscore(y_tr, pred_tr, num_classes, multi)
+        prec_ts = precision(y_ts, pred_ts, num_classes, multi)
+        rec_ts = recall(y_ts, pred_ts, num_classes, multi)
+        f1_ts = fscore(y_ts, pred_ts, num_classes, multi)
 
             # debug only
             #full_preds = tf.math.argmax(raw_pred, axis=-1)
             #full_y = tf.math.argmax(raw_y, axis=-1)
-            print("Iteration {}/{} -- Train Loss: {:.4f}".format(step + 1, iterations, ls.numpy()), "Test Loss: {:.4f}".format(tls.numpy()), "Test Prec/Rec/F1: {:.4f}/{:.4f}/{:.4f}".format(prec_ts, rec_ts, f1_ts), "Time: {:.4f}s".format(time.time() - start))
-            writer.add_scalar("Train loss", ls.numpy(), step)
-            writer.add_scalar("Test loss", tls.numpy(), step)
-            writer.add_scalar("Test accuracy", test_acc, step)
-            writer.add_scalar("Test precision", prec_tr.numpy(), step)
-            writer.add_scalar("Test recall", rec_tr.numpy(), step)
-            writer.add_scalar("Test F1", f1_tr.numpy(), step)
-            writer.add_scalar("Test accuracy", train_acc, step)
-            writer.add_scalar("Test precision", prec_ts.numpy(), step)
-            writer.add_scalar("Test recall", rec_ts.numpy(), step)
-            writer.add_scalar("Test F1", f1_ts.numpy(), step)
+        
+        if (step + 1) % args.log_frequency == 0:
+            print("Iteration {}/{} -- Train Loss/Prec/Rec/F1: {:.4f}/{:.4f}/{:.4f}/{:.4f}".format(step + 1, iterations, ls.numpy(), prec_tr.numpy(), rec_tr.numpy(), f1_tr.numpy()), "Test Loss/Prec/Rec/F1: {:.4f}/{:.4f}/{:.4f}/{:.4f}".format(tls.numpy(), prec_ts, rec_ts, f1_ts), "Time: {:.4f}s".format(time.time() - start))
+        writer.add_scalar("Train loss", ls.numpy(), step)
+        writer.add_scalar("Test loss", tls.numpy(), step)
+        writer.add_scalar("Test accuracy", test_acc, step)
+        writer.add_scalar("Train precision", prec_tr.numpy(), step)
+        writer.add_scalar("Train recall", rec_tr.numpy(), step)
+        writer.add_scalar("Train F1", f1_tr.numpy(), step)
+        writer.add_scalar("Train accuracy", train_acc, step)
+        writer.add_scalar("Test precision", prec_ts.numpy(), step)
+        writer.add_scalar("Test recall", rec_ts.numpy(), step)
+        writer.add_scalar("Test F1", f1_ts.numpy(), step)
     return test_accuracy
 
 if __name__ == '__main__':
     args = get_args()
-    main(data_root=args.data_root, iterations=args.iterations, support_size=args.support_size, num_classes=args.label_subset_size, experiment_name=args.experiment_name, meta_batch_size=args.bs, sampling_mode=args.sampling_mode, multi = args.multilabel_scheme)
+    main(data_root=args.data_root, iterations=args.iterations, support_size=args.support_size, num_classes=args.label_subset_size, experiment_name=args.experiment_name, meta_batch_size=args.bs, sampling_mode=args.sampling_mode, multi = args.multilabel_scheme, log_frequency=args.log_frequency)
 
 
