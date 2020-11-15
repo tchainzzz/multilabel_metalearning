@@ -33,23 +33,24 @@ class ProtoNet(tf.keras.Model):
             self.__setattr__("conv%d" % i, block)
             self.convs.append(block)"""
 
-        self.convs = [SNAILConvBlock(num_filters) for _ in range(num_blocks)]
+        self.convs = [SNAILConvBlock(num_filters) for _ in range(num_blocks - 1)]
         self.flatten = tf.keras.layers.Flatten()
-        #if multi == 'powerset':
-        #    self.embed = tf.keras.layers.Dense(latent_dim)
-        #else:
+        if multi == 'powerset':
+        #   self.embed = tf.keras.layers.Dense(latent_dim)
+            self.embed = SNAILConvBlock(num_filters)
+        else:
         #    self.embed = [tf.keras.layers.Dense(latent_dim) for _ in range(num_classes)]
+            self.embed = [SNAILConvBlock(num_filters) for _ in range(num_classes)]
 
     def call(self, inp):
         out = inp
         for conv in self.convs:
             out = conv(out)
-        out = self.flatten(out)
-        """
         if self.multi == 'powerset':
             out = self.embed(out)
+            out = self.flatten(out)
         else:
-            out = tf.stack([layer(out) for layer in self.embed], axis=1)"""
+            out = tf.stack([self.flatten(layer(out)) for layer in self.embed], axis=1)
         return out
 
     def safe_masked_centroid(self, support, embed_size, placeholder=0.):
@@ -77,6 +78,7 @@ class ProtoNet(tf.keras.Model):
             else:
                 bin_rel_pos_mask = (labels_onehot[:, i, 1] == 1)
                 bin_rel_neg_mask = (labels_onehot[:, i, 0] == 1)
+
                 support_class, not_support_class = x_latent[:, i, :][bin_rel_pos_mask], x_latent[:, i, :][bin_rel_neg_mask]
                 pos_centroid, neg_centroid = self.safe_masked_centroid(support_class, embed_size), self.safe_masked_centroid(not_support_class, embed_size)
                 centroid = tf.stack([pos_centroid, neg_centroid], axis=0)
