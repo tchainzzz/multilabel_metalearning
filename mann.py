@@ -38,7 +38,7 @@ class SNAILConvBlock(tf.keras.Model):
 
 class MANN(tf.keras.Model):
 
-    def __init__(self, num_classes, support_size, query_size, num_blocks=4, embed_size=64, memory_size=512, multi = 'powerset'):
+    def __init__(self, num_classes, support_size, query_size, num_blocks=4, embed_size=64, memory_size=200, multi = 'powerset'):
         super(MANN, self).__init__()
         self.num_classes = num_classes
         self.support_size = support_size
@@ -126,7 +126,7 @@ def train_step(images, labels, model, optim, eval=False):
     return predictions, loss
 
 
-def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_size=4, meta_batch_size=8, random_seed=42, iterations=1000, experiment_name=None, lr=1e-3, lr_schedule=False, sampling_mode='greedy', multi = 'powerset', log_frequency=50):
+def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_size=4, meta_batch_size=16, random_seed=42, iterations=1000, experiment_name=None, lr=1e-3, lr_schedule=False, sampling_mode='greedy', multi = 'powerset', log_frequency=50):
     random.seed(random_seed)
     np.random.seed(random_seed)
     tf.random.set_seed(random_seed)
@@ -144,14 +144,15 @@ def main(data_root='../cs330-storage/', num_classes=3, support_size=16, query_si
     o = MANN((1 << num_classes) - 1 if multi == 'powerset' else num_classes, support_size, query_size, multi = multi)
 
     lr_config = lr
-    if lr_schedule:
-        lr_config = tf.keras.optimizers.schedules.ExponentialDecay(
-          initial_learning_rate=lr,
-          decay_steps=1000,
-          decay_rate=0.85,
-          staircase=True)
+    #if lr_schedule:
+        #lr_config = tf.keras.optimizers.schedules.ExponentialDecay(
+          #initial_learning_rate=lr,
+          #decay_steps=1000,
+          #decay_rate=0.85,
+          #staircase=True)
     #optim = tf.keras.optimizers.Adam(learning_rate=0.00001)
-    optim = tf.keras.optimizers.SGD(learning_rate=lr_config)
+    #optim = tf.keras.optimizers.SGD(learning_rate=lr_config)
+    optim = tf.keras.optimizers.RMSprop(learning_rate=1e-4, rho=0.95, momentum=0.9)
     test_accuracy = []
     for step in range(iterations):
         start = time.time()
