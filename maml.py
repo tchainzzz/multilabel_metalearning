@@ -80,8 +80,10 @@ class MAML(tf.keras.Model):
                     tf.Variable(self.inner_update_lr, name='inner_update_lr_%s_%d' %
                         (key, j)) for j in range(num_inner_updates)]
 
+    
     @tf.function
     def call(self, inp, meta_batch_size=25, num_inner_updates=1):
+
         def task_inner_loop(inp, reuse=True,
                             meta_batch_size=25, num_inner_updates=1):
             start = time.time()
@@ -103,7 +105,7 @@ class MAML(tf.keras.Model):
             task_output_tr_pre = self.inner_model(input_tr, weights)
             task_loss_tr_pre = self.loss_func(task_output_tr_pre, label_tr)
             for i in range(num_inner_updates):
-                with tf.GradientTape(persistent=False) as tape: # keep track of high-order derivs on train data only, and use those to update
+                with tf.GradientTape(persistent=True) as tape: # keep track of high-order derivs on train data only, and use those to update
                     for key in weights: tape.watch(weights[key])
                     output_tr = self.inner_model(input_tr, weights) 
                     loss_tr = self.loss_func(output_tr, label_tr)
