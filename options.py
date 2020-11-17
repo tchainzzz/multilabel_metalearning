@@ -20,4 +20,6 @@ def get_args():
     psr.add_argument("--model-class-name", type=str, default="VanillaConvModel", help="Model class name (in models.py)")
     psr.add_argument("--sampling-mode", type=str, choices=['permutation', 'greedy'], default='greedy', help="Multi-label task sampling framework")
     psr.add_argument("--embed-dim", type=int, default=16, help="Embedding dimension for protonets")
+    psr.add_argument("--num-conv-filters", type=int, default=64, help="Number of filters in convolutional blocks (Protonets)")
+    psr.add_argument("--patience", type=int, default=200, help="Number of validation loss iterations without improvement before stopping")
     return psr.parse_args()

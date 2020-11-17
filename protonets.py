@@ -12,6 +12,7 @@ from utils import *
 from tensorboardX import SummaryWriter
 
 from mann import SNAILConvBlock
+import time
 
 class ProtoNet(tf.keras.Model):
 
@@ -32,22 +33,24 @@ class ProtoNet(tf.keras.Model):
             self.__setattr__("conv%d" % i, block)
             self.convs.append(block)"""
 
-        self.convs = [SNAILConvBlock() for _ in range(num_blocks)]
+        self.convs = [SNAILConvBlock(num_filters) for _ in range(num_blocks - 1)]
         self.flatten = tf.keras.layers.Flatten()
         if multi == 'powerset':
-            self.embed = tf.keras.layers.Dense(latent_dim)
+        #   self.embed = tf.keras.layers.Dense(latent_dim)
+            self.embed = SNAILConvBlock(num_filters)
         else:
-            self.embed = [tf.keras.layers.Dense(latent_dim) for _ in range(num_classes)]
+        #    self.embed = [tf.keras.layers.Dense(latent_dim) for _ in range(num_classes)]
+            self.embed = [SNAILConvBlock(num_filters) for _ in range(num_classes)]
 
     def call(self, inp):
         out = inp
         for conv in self.convs:
             out = conv(out)
-        out = self.flatten(out)
         if self.multi == 'powerset':
             out = self.embed(out)
+            out = self.flatten(out)
         else:
-            out = tf.stack([layer(out) for layer in self.embed], axis=1)
+            out = tf.stack([self.flatten(layer(out)) for layer in self.embed], axis=1)
         return out
 
     def safe_masked_centroid(self, support, embed_size, placeholder=0.):
@@ -75,6 +78,7 @@ class ProtoNet(tf.keras.Model):
             else:
                 bin_rel_pos_mask = (labels_onehot[:, i, 1] == 1)
                 bin_rel_neg_mask = (labels_onehot[:, i, 0] == 1)
+
                 support_class, not_support_class = x_latent[:, i, :][bin_rel_pos_mask], x_latent[:, i, :][bin_rel_neg_mask]
                 pos_centroid, neg_centroid = self.safe_masked_centroid(support_class, embed_size), self.safe_masked_centroid(not_support_class, embed_size)
                 centroid = tf.stack([pos_centroid, neg_centroid], axis=0)
@@ -147,11 +151,8 @@ def proto_net_eval(model, x, q, labels_ph, label_subset_size):
     return ce_loss, prec, rec, f1
 
 
-def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, n_meta_test_way=3, n_meta_test_support=8, n_meta_test_query=8, multi='powerset', experiment_name=None, n_epochs=20, latent_dim=16, lr=1e-3):
-    n_episodes = 100
+def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, n_meta_test_way=3, n_meta_test_support=8, n_meta_test_query=8, multi='powerset', experiment_name=None, n_episodes=10000, latent_dim=16, lr=1e-3, num_filters=64, log_frequency=5, patience=200):
 
-    num_filters = 32
-    num_conv_layers = 3
     n_meta_test_episodes = 1000
     experiment_fullname = generate_experiment_name(experiment_name, extra_tokens=[Path(__file__).stem])
 
@@ -159,8 +160,15 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
 
-    model = ProtoNet([num_filters] * num_conv_layers, latent_dim, n_way, multi=multi)
-    optimizer = tf.keras.optimizers.SGD(lr=lr)
+    model = ProtoNet(num_filters, latent_dim, n_way, multi=multi)
+    initial_learning_rate = lr
+    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+        initial_learning_rate,
+        decay_steps=2000,
+        decay_rate=0.5,
+        staircase=True)
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
 
     train_losses, train_accs = [], []
     val_losses, val_accs = [], []
@@ -169,22 +177,23 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
     data_dir = os.path.join(data_root, "SmallEarthNet")
     meta_dataset = load_data.MetaBigEarthNetTaskDataset(data_dir=data_dir, support_size=n_support+n_query, label_subset_size=n_way, filter_files=filter_files, split_save_path="smallearthnet.pkl", split_file="smallearthnet.pkl", data_format='channels_last')
 
-    for ep in range(n_epochs):
+    best_episode, best_val_loss = 0, float('inf')
+    for ep in range(n_episodes):
+        start = time.time()
         ls, prec, rec, f1 = [], [], [], []
-        for epi in range(n_episodes):
-            X, y, y_debug = meta_dataset.sample_batch(batch_size=1, split='train', mode='permutation')
-            y = convert_to_powerset(y) if multi == 'powerset' else convert_to_bin_rel(y)
-            # Powerset shapes: (1, support + query, h, w, c); (1, support + query, 2^n_classes - 1)
-            # BR shapes: " , (1, support + query, n_classes, 2)
-            _, s, h, w, c = X.shape
-            X = tf.squeeze(X, axis=0)
-            support, query = X[:n_support, ...], X[n_support:, ...]
-            labels = tf.squeeze(y[:, n_support:, ...], 0)
-            ls_tr, prec_tr, rec_tr, f1_tr = proto_net_train_step(model, optimizer, x=support, q=query, labels_ph=labels, label_subset_size=n_way)
-            ls.append(ls_tr.numpy())
-            prec.append(prec_tr.numpy())
-            rec.append(rec_tr.numpy())
-            f1.append(f1_tr.numpy())
+        X, y, y_debug = meta_dataset.sample_batch(batch_size=1, split='train', mode='permutation')
+        y = convert_to_powerset(y) if multi == 'powerset' else convert_to_bin_rel(y)
+        # Powerset shapes: (1, support + query, h, w, c); (1, support + query, 2^n_classes - 1)
+        # BR shapes: " , (1, support + query, n_classes, 2)
+        _, s, h, w, c = X.shape
+        X = tf.squeeze(X, axis=0)
+        support, query = X[:n_support, ...], X[n_support:, ...]
+        labels = tf.squeeze(y[:, n_support:, ...], 0)
+        ls_tr, prec_tr, rec_tr, f1_tr = proto_net_train_step(model, optimizer, x=support, q=query, labels_ph=labels, label_subset_size=n_way)
+        ls.append(ls_tr.numpy())
+        prec.append(prec_tr.numpy())
+        rec.append(rec_tr.numpy())
+        f1.append(f1_tr.numpy())
         mean_ls = np.mean(ls)
         mean_prec = np.mean(prec)
         mean_rec = np.mean(rec)
@@ -200,16 +209,28 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
         support, query = X[:n_support, ...], X[n_support:, ...]
         labels = tf.squeeze(y[:, n_support:, ...], 0)
         val_ls, val_prec, val_rec, val_f1 = proto_net_eval(model, x=support, q=query, labels_ph=labels, label_subset_size=n_way)
+
+
         writer.add_scalar('Meta-validation loss', val_ls.numpy(), ep)
         writer.add_scalar('Meta-validation precision', val_prec.numpy(), ep)
         writer.add_scalar('Meta-validation recall', val_rec.numpy(), ep)
         writer.add_scalar('Meta-validation F1', val_f1.numpy(), ep)
-        print('epoch {}/{} - meta-train loss/prec/rec/f1: {:.4f}/{:.4f}/{:.4f}/{:.4f}, meta-val loss/prec/rec/f1: {:.4f}/{:.4f}/{:.4f}/{:.4f}'.format(ep+1, n_epochs, mean_ls, mean_prec, mean_rec, mean_f1, val_ls.numpy(), val_prec.numpy(), val_rec.numpy(), val_f1.numpy()))
+
+        if (ep + 1) % log_frequency == 0:
+            print('Iteration {}/{} - meta-train loss/prec/rec/f1: {:.4f}/{:.4f}/{:.4f}/{:.4f}, meta-val loss/prec/rec/f1: {:.4f}/{:.4f}/{:.4f}/{:.4f}, took {:.4f}s'.format(ep+1, n_episodes, mean_ls, mean_prec, mean_rec, mean_f1, val_ls.numpy(), val_prec.numpy(), val_rec.numpy(), val_f1.numpy(), time.time() - start))
     #if (epi + 1) % 100 == 0:
     #    train_losses.append(ls.numpy())
     #    train_accs.append(ac.numpy())
     #    val_losses.append(val_ls.numpy())
     #    val_accs.append(val_ac.numpy())
+
+        if val_ls.numpy() < best_val_loss:
+            best_episode = ep
+            best_val_loss = val_ls.numpy()
+            print("Validation loss improved at epoch", ep+1)
+        if best_episode + patience <= ep:
+            print("Validation loss failed to improve for {} epochs. Stopping at epoch {}/{}".format(patience, ep+1, n_episodes))
+            break
     print('Testing...')
     meta_test_loss, meta_test_prec, meta_test_rec, meta_test_f1 = [], [], [], []
     for epi in range(n_meta_test_episodes):
@@ -232,4 +253,5 @@ def run_protonet(data_root='../cs330-storage', n_way=3, n_support=8, n_query=8, 
 from options import *
 if __name__ == '__main__':
     args = get_args()
-    results = run_protonet(args.data_root, n_way=args.label_subset_size, n_support=args.support_size, n_query=args.support_size, n_meta_test_way=args.label_subset_size, n_meta_test_support=args.support_size, n_meta_test_query=args.support_size, multi=args.multilabel_scheme, experiment_name=args.experiment_name, n_epochs=args.iterations, latent_dim=args.embed_dim, lr=args.lr)
+    results = run_protonet(args.data_root, n_way=args.label_subset_size, n_support=args.support_size, n_query=args.support_size, n_meta_test_way=args.label_subset_size, n_meta_test_support=args.support_size, n_meta_test_query=args.support_size, multi=args.multilabel_scheme, experiment_name=args.experiment_name, n_episodes=args.iterations, latent_dim=args.embed_dim, lr=args.lr, num_filters=args.num_conv_filters, log_frequency=args.log_frequency, patience=args.patience)
+
